@@ -43,6 +43,8 @@
 #include <ktogglefullscreenaction.h>
 #include <kactioncollection.h>
 #include <kwindowsystem.h>
+#include <ktabbar.h>
+#include <QVBoxLayout>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -95,10 +97,26 @@ void Shell::init()
   m_part = factory->create< KParts::ReadWritePart >( this );
   if (m_part)
   {
+    // Setup tab bar
+    m_tabBar = new KTabBar( this );
+    m_tabBar->setMovable( true );
+    m_tabBar->setTabsClosable( true );
+    connect( m_tabBar, SIGNAL(currentChanged(int)), SLOT(setActiveTab(int)) );
+    connect( m_tabBar, SIGNAL(tabCloseRequested(int)), SLOT(closeTab(int)) );
+    connect( m_tabBar, SIGNAL(contextMenu(int,QPoint)), SLOT(openTabContextMenu(int,QPoint)) );
+    connect( m_tabBar, SIGNAL(mouseMiddleClick(int)), SLOT(closeTab(int)) );
+    connect( m_tabBar, SIGNAL(tabMoved(int,int)), SLOT(moveTab(int,int)) );
+
+    QWidget* centralWidget = new QWidget( this );
+    m_centralLayout = new QVBoxLayout( centralWidget );
+    m_centralLayout->setSpacing( 0 );
+    m_centralLayout->setMargin( 0 );
+    m_centralLayout->addWidget( m_tabBar );
+    m_centralLayout->addWidget( m_part->widget() );
+    setCentralWidget( centralWidget );
+
     // then, setup our actions
     setupActions();
-    // tell the KParts::MainWindow that this is indeed the main widget
-    setCentralWidget(m_part->widget());
     // and integrate the part's GUI with the shell's
     setupGUI(Keys | ToolBar | Save);
     createGUI(m_part);
@@ -338,6 +356,8 @@ void Shell::fileOpen()
     {
         openUrl( url );
     }
+
+
 }
 
 void Shell::slotQuit()
@@ -412,6 +432,26 @@ QSize Shell::sizeHint() const
 bool Shell::queryClose()
 {
     return m_part ? m_part->queryClose() : true;
+}
+
+void Shell::setActiveTab( int tab )
+{
+    qDebug() << "setActiveTab";
+}
+
+void Shell::closeTab( int tab )
+{
+    qDebug() << "closeTab";
+}
+
+void Shell::openTabContextMenu( int tab, QPoint point )
+{
+    qDebug() << "openTabContextMenu";
+}
+
+void Shell::moveTab( int from, int to )
+{
+    qDebug() << "moveTab";
 }
 
 #include "shell.moc"

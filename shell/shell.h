@@ -23,6 +23,8 @@
 class KCmdLineArgs;
 class KRecentFilesAction;
 class KToggleAction;
+class KTabBar;
+class QVBoxLayout;
 
 class KDocumentViewer;
 class Part;
@@ -92,6 +94,12 @@ private slots:
   void showOpenRecentMenu();
   void closeUrl();
 
+  // Tab event handlers
+  void setActiveTab( int tab );
+  void closeTab( int tab );
+  void openTabContextMenu( int tab, QPoint point );
+  void moveTab( int from, int to );
+
 signals:
   void restoreDocument(const KConfigGroup &group);
   void saveDocumentRestoreInfo(KConfigGroup &group);
@@ -101,6 +109,7 @@ private:
   void setupActions();
   void init();
   QStringList fileFormats() const;
+  
 
 private:
   KCmdLineArgs* m_args;
@@ -116,6 +125,8 @@ private:
   bool m_menuBarWasShown, m_toolBarWasShown;
   bool m_unique;
   KUrl m_openUrl;
+  QVBoxLayout* m_centralLayout;
+  KTabBar* m_tabBar;
 
 #ifdef KActivities_FOUND
   KActivities::ResourceInstance* m_activityResource;
