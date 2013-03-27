@@ -45,6 +45,7 @@
 #include <kwindowsystem.h>
 #include <ktabbar.h>
 #include <QVBoxLayout>
+#include <QStackedWidget>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -63,11 +64,6 @@ Shell::Shell(KCmdLineArgs* args)
     , m_activityResource(0)
 #endif
 {
-  if (m_args && args->count() > 0)
-  {
-    m_openUrl = ShellUtils::urlFromArg(m_args->arg(0),
-        ShellUtils::qfileExistFunc(), m_args->getOption("page"));
-  }
   init();
 }
 
@@ -83,8 +79,8 @@ void Shell::init()
   // this routine will find and load our Part.  it finds the Part by
   // name which is a bad idea usually.. but it's alright in this
   // case since our Part is made for this Shell
-  KPluginFactory *factory = KPluginLoader("okularpart").factory();
-  if (!factory)
+  m_partFactory = KPluginLoader("okularpart").factory();
+  if (!m_partFactory)
   {
     // if we couldn't find our Part, we exit since the Shell by
     // itself can't do anything useful
@@ -94,7 +90,7 @@ void Shell::init()
   }
 
   // now that the Part plugin is loaded, create the part
-  m_part = factory->create< KParts::ReadWritePart >( this );
+  m_part = m_partFactory->create< KParts::ReadWritePart >( this );
   if (m_part)
   {
     // Setup tab bar
@@ -108,12 +104,18 @@ void Shell::init()
     connect( m_tabBar, SIGNAL(tabMoved(int,int)), SLOT(moveTab(int,int)) );
 
     QWidget* centralWidget = new QWidget( this );
+    m_viewStack = new QStackedWidget( this );
+    m_viewStack->addWidget( m_part->widget() );
+
     m_centralLayout = new QVBoxLayout( centralWidget );
     m_centralLayout->setSpacing( 0 );
     m_centralLayout->setMargin( 0 );
     m_centralLayout->addWidget( m_tabBar );
-    m_centralLayout->addWidget( m_part->widget() );
+    m_centralLayout->addWidget( m_viewStack );
     setCentralWidget( centralWidget );
+
+    m_parts.append( m_part );
+    m_activeTab = 0;
 
     // then, setup our actions
     setupActions();
@@ -148,7 +150,7 @@ void Shell::init()
     
     QDBusConnection::sessionBus().registerObject("/okularshell", this, QDBusConnection::ExportScriptableSlots);
 
-    if (m_openUrl.isValid()) QTimer::singleShot(0, this, SLOT(delayedOpen()));
+    if (m_args && m_args->count() > 0) QTimer::singleShot(0, this, SLOT(delayedOpen()));
   }
   else
   {
@@ -158,7 +160,18 @@ void Shell::init()
 
 void Shell::delayedOpen()
 {
-   openUrl( m_openUrl );
+    if( m_args )
+    {
+        for( int i = 0; i < m_args->count(); ++i )
+        {
+            KUrl url = ShellUtils::urlFromArg(m_args->arg(i),
+                           ShellUtils::qfileExistFunc(), m_args->getOption("page"));
+            if( url.isValid() )
+                openUrl( url );
+        }
+    }
+    if( m_activeTab > 0 )
+        setActiveTab( 0 );
 }
 
 void Shell::showOpenRecentMenu()
@@ -190,9 +203,7 @@ void Shell::openUrl( const KUrl & url )
             }
             else
             {
-                Shell* newShell = new Shell();
-                newShell->openUrl( url );
-                newShell->show();
+                openNewTab( url );
             }
         }
         else
@@ -226,7 +237,7 @@ void Shell::openUrl( const KUrl & url )
 
 void Shell::closeUrl()
 {
-    m_part->closeUrl();
+    closeTab( m_activeTab );
 }
 
 void Shell::readSettings()
@@ -436,22 +447,56 @@ bool Shell::queryClose()
 
 void Shell::setActiveTab( int tab )
 {
-    qDebug() << "setActiveTab";
+    if( tab == -1 )
+        return;
+
+    m_activeTab = tab;
+    m_tabBar->setCurrentIndex( tab );
+    m_viewStack->setCurrentWidget( m_parts[tab]->widget() );
+    createGUI( m_parts[tab] );
 }
 
 void Shell::closeTab( int tab )
 {
-    qDebug() << "closeTab";
+    m_viewStack->removeWidget( m_parts[tab]->widget() );
+    m_parts[tab]->closeUrl();
+    m_parts[tab]->disconnect();
+    m_parts[tab]->deleteLater();
+    m_parts.removeAt( tab );
+
+    m_tabBar->removeTab( tab );
+
+    if( m_tabBar->count() == 1 )
+        m_tabBar->removeTab( 0 );
 }
 
 void Shell::openTabContextMenu( int tab, QPoint point )
 {
-    qDebug() << "openTabContextMenu";
 }
 
 void Shell::moveTab( int from, int to )
 {
-    qDebug() << "moveTab";
+    m_parts.move( from, to );
+}
+
+void Shell::openNewTab( const KUrl& url )
+{
+    // Tabs are hidden when there's only one, so show it
+    if( m_parts.size() == 1 )
+    {
+        m_tabBar->addTab( m_parts[0]->url().fileName() );
+    }
+
+    // Make new part
+    m_parts.append( m_partFactory->create<KParts::ReadWritePart>(this) );
+    m_parts.last()->openUrl( url );
+
+    // Update GUI
+    m_activeTab = m_parts.size() - 1;
+    m_viewStack->addWidget( m_parts.last()->widget() );
+    m_viewStack->setCurrentIndex( m_activeTab );
+    m_tabBar->addTab( m_parts.last()->url().fileName() );
+    m_tabBar->setCurrentIndex( m_activeTab );
 }
 
 #include "shell.moc"

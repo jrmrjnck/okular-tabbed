@@ -25,6 +25,8 @@ class KRecentFilesAction;
 class KToggleAction;
 class KTabBar;
 class QVBoxLayout;
+class QStackedWidget;
+class KPluginFactory;
 
 class KDocumentViewer;
 class Part;
@@ -109,11 +111,12 @@ private:
   void setupActions();
   void init();
   QStringList fileFormats() const;
-  
+  void openNewTab( const KUrl& url );
 
 private:
   KCmdLineArgs* m_args;
   KParts::ReadWritePart* m_part;
+  KPluginFactory* m_partFactory;
   KDocumentViewer* m_doc;
   KRecentFilesAction* m_recent;
   QStringList m_fileformats;
@@ -127,6 +130,9 @@ private:
   KUrl m_openUrl;
   QVBoxLayout* m_centralLayout;
   KTabBar* m_tabBar;
+  QStackedWidget* m_viewStack;
+  QList<KParts::ReadWritePart*> m_parts;
+  int m_activeTab;
 
 #ifdef KActivities_FOUND
   KActivities::ResourceInstance* m_activityResource;
