@@ -50,7 +50,7 @@ public:
   /**
    * Constructor
    */
-  explicit Shell(KCmdLineArgs* args = 0, int argIndex = -1);
+  explicit Shell(KCmdLineArgs* args = 0);
 
   /**
    * Default Destructor

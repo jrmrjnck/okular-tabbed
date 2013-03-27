@@ -57,15 +57,15 @@
 static const char *shouldShowMenuBarComingFromFullScreen = "shouldShowMenuBarComingFromFullScreen";
 static const char *shouldShowToolBarComingFromFullScreen = "shouldShowToolBarComingFromFullScreen";
 
-Shell::Shell(KCmdLineArgs* args, int argIndex)
+Shell::Shell(KCmdLineArgs* args)
   : KParts::MainWindow(), m_args(args), m_menuBarWasShown(true), m_toolBarWasShown(true)
 #ifdef KActivities_FOUND
     , m_activityResource(0)
 #endif
 {
-  if (m_args && argIndex != -1)
+  if (m_args && args->count() > 0)
   {
-    m_openUrl = ShellUtils::urlFromArg(m_args->arg(argIndex),
+    m_openUrl = ShellUtils::urlFromArg(m_args->arg(0),
         ShellUtils::qfileExistFunc(), m_args->getOption("page"));
   }
   init();

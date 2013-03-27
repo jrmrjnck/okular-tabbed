@@ -76,12 +76,7 @@ int main(int argc, char** argv)
             return 0;
         }
 
-        if (args->count() == 0)
-        {
-            Shell* widget = new Shell(args);
-            widget->show();
-        }
-        else if (args->isSet( "unique" ) && args->count() > 1)
+        if (args->isSet( "unique" ) && args->count() > 1)
         {
             QTextStream stream(stderr);
             stream << i18n( "Error: Can't open more than one document with the --unique switch" ) << endl;
@@ -89,11 +84,8 @@ int main(int argc, char** argv)
         }
         else
         {
-            for (int i = 0; i < args->count(); ++i)
-            {
-                Shell* widget = new Shell(args, i);
-                widget->show();
-            }
+            Shell* widget = new Shell(args);
+            widget->show();
         }
     }
 
