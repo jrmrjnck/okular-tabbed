@@ -73,7 +73,6 @@ void Shell::init()
   setContextMenuPolicy( Qt::NoContextMenu );
   // set the shell's ui resource file
   setXMLFile("shell.rc");
-  m_doc=0L;
   m_fileformatsscanned = false;
   m_showMenuBarAction = 0;
   // this routine will find and load our Part.  it finds the Part by
@@ -85,13 +84,12 @@ void Shell::init()
     // if we couldn't find our Part, we exit since the Shell by
     // itself can't do anything useful
     KMessageBox::error(this, i18n("Unable to find the Okular component."));
-    m_part = 0;
     return;
   }
 
   // now that the Part plugin is loaded, create the part
-  m_part = m_partFactory->create< KParts::ReadWritePart >( this );
-  if (m_part)
+  KParts::ReadWritePart* firstPart = m_partFactory->create< KParts::ReadWritePart >( this );
+  if (firstPart)
   {
     // Setup tab bar
     m_tabBar = new KTabBar( this );
@@ -105,7 +103,7 @@ void Shell::init()
 
     QWidget* centralWidget = new QWidget( this );
     m_viewStack = new QStackedWidget( this );
-    m_viewStack->addWidget( m_part->widget() );
+    m_viewStack->addWidget( firstPart->widget() );
 
     m_centralLayout = new QVBoxLayout( centralWidget );
     m_centralLayout->setSpacing( 0 );
@@ -114,19 +112,16 @@ void Shell::init()
     m_centralLayout->addWidget( m_viewStack );
     setCentralWidget( centralWidget );
 
-    m_parts.append( m_part );
+    m_tabs.append( TabState(firstPart) );
     m_activeTab = 0;
 
     // then, setup our actions
     setupActions();
     // and integrate the part's GUI with the shell's
     setupGUI(Keys | ToolBar | Save);
-    createGUI(m_part);
-    m_doc = qobject_cast<KDocumentViewer*>(m_part);
-    connect( this, SIGNAL(restoreDocument(KConfigGroup)),m_part, SLOT(restoreDocument(KConfigGroup)));
-    connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), m_part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
-    connect( m_part, SIGNAL(enablePrintAction(bool)), m_printAction, SLOT(setEnabled(bool)));
-    connect( m_part, SIGNAL(enableCloseAction(bool)), m_closeAction, SLOT(setEnabled(bool)));
+    createGUI(firstPart);
+
+    connectPart( firstPart );
 
     readSettings();
 
@@ -181,56 +176,60 @@ void Shell::showOpenRecentMenu()
 
 Shell::~Shell()
 {
-    if ( m_part )
+    if( !m_tabs.empty() )
     {
         writeSettings();
-        m_part->closeUrl( false );
+        for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
+        {
+           it->part->closeUrl( false );
+        }
     }
-    m_part = 0; // It is deleted by the KPart/QObject machinery
     if ( m_args )
         m_args->clear();
 }
 
 void Shell::openUrl( const KUrl & url )
 {
-    if ( m_part )
+    if( m_tabs.size() == 0 )
+        return;
+
+    if( !m_tabs[m_activeTab].part->url().isEmpty() )
     {
-        if( !m_part->url().isEmpty() )
+        if( m_unique )
         {
-            if( m_unique )
-            {
-                KMessageBox::error(this, i18n("Can't open more than one document in the unique Okular instance."));
-            }
-            else
-            {
-                openNewTab( url );
-            }
+            KMessageBox::error(this, i18n("Can't open more than one document in the unique Okular instance."));
         }
         else
         {
-            if ( m_args ){
-                if ( m_doc && m_args->isSet( "presentation" ) )
-                    m_doc->startPresentation();
-                if ( m_args->isSet( "print" ) )
-                    QMetaObject::invokeMethod( m_part, "enableStartWithPrint" );
-            }
-            bool openOk = m_part->openUrl( url );
-            const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
-            if ( !isstdin )
+            openNewTab( url );
+        }
+    }
+    else
+    {
+        KParts::ReadWritePart* emptyPart = m_tabs[m_activeTab].part;
+        if ( m_args ){
+            KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(emptyPart);
+            if ( doc && m_args->isSet( "presentation" ) )
+                doc->startPresentation();
+            if ( m_args->isSet( "print" ) )
+                QMetaObject::invokeMethod( emptyPart, "enableStartWithPrint" );
+        }
+        bool openOk = emptyPart->openUrl( url );
+        const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
+        if ( !isstdin )
+        {
+            if ( openOk )
             {
-                if ( openOk )
-                {
 #ifdef KActivities_FOUND
-                    if ( !m_activityResource )
-                        m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
+                if ( !m_activityResource )
+                    m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
 
-                    m_activityResource->setUri( url );
+                m_activityResource->setUri( url );
 #endif
-                    m_recent->addUrl( url );
-                }
-                else
-                    m_recent->removeUrl( url );
+                m_recent->addUrl( url );
             }
+            else
+                m_recent->removeUrl( url );
         }
     }
 }
@@ -277,7 +276,7 @@ void Shell::setupActions()
   connect( m_recent, SIGNAL(triggered()), this, SLOT(showOpenRecentMenu()) );
   m_recent->setToolTip( i18n("Click to open a file\nClick and hold to open a recent file") );
   m_recent->setWhatsThis( i18n( "<b>Click</b> to open a file or <b>Click and hold</b> to select a recent file" ) );
-  m_printAction = KStandardAction::print( m_part, SLOT(slotPrint()), actionCollection() );
+  m_printAction = KStandardAction::print( this, SLOT(print()), actionCollection() );
   m_printAction->setEnabled( false );
   m_closeAction = KStandardAction::close( this, SLOT(closeUrl()), actionCollection() );
   m_closeAction->setEnabled( false );
@@ -303,10 +302,7 @@ void Shell::readProperties(const KConfigGroup &group)
   // config file.  this function is automatically called whenever
   // the app is being restored.  read in here whatever you wrote
   // in 'saveProperties'
-  if(m_part)
-  {
     emit restoreDocument(group);
-  }
 }
 
 QStringList Shell::fileFormats() const
@@ -336,8 +332,9 @@ void Shell::fileOpen()
 	// button is clicked
     if ( !m_fileformatsscanned )
     {
-        if ( m_doc )
-            m_fileformats = m_doc->supportedMimeTypes();
+        KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(m_tabs[m_activeTab].part);
+        if ( doc )
+            m_fileformats = doc->supportedMimeTypes();
 
         if ( m_fileformats.isEmpty() )
             m_fileformats = fileFormats();
@@ -346,8 +343,9 @@ void Shell::fileOpen()
     }
 
     QString startDir;
-    if ( m_part->url().isLocalFile() )
-        startDir = m_part->url().toLocalFile();
+    KParts::ReadWritePart* curPart = m_tabs[m_activeTab].part;
+    if ( curPart->url().isLocalFile() )
+        startDir = curPart->url().toLocalFile();
     KFileDialog dlg( startDir, QString(), this );
     dlg.setOperationMode( KFileDialog::Opening );
 
@@ -367,8 +365,6 @@ void Shell::fileOpen()
     {
         openUrl( url );
     }
-
-
 }
 
 void Shell::slotQuit()
@@ -442,7 +438,12 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
-    return m_part ? m_part->queryClose() : true;
+    bool ret = true;
+    for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
+    {
+        ret = ret && it->part->queryClose();
+    }
+    return ret;
 }
 
 void Shell::setActiveTab( int tab )
@@ -452,17 +453,17 @@ void Shell::setActiveTab( int tab )
 
     m_activeTab = tab;
     m_tabBar->setCurrentIndex( tab );
-    m_viewStack->setCurrentWidget( m_parts[tab]->widget() );
-    createGUI( m_parts[tab] );
+    m_viewStack->setCurrentWidget( m_tabs[tab].part->widget() );
+    createGUI( m_tabs[tab].part );
 }
 
 void Shell::closeTab( int tab )
 {
-    m_viewStack->removeWidget( m_parts[tab]->widget() );
-    m_parts[tab]->closeUrl();
-    m_parts[tab]->disconnect();
-    m_parts[tab]->deleteLater();
-    m_parts.removeAt( tab );
+    m_viewStack->removeWidget( m_tabs[tab].part->widget() );
+    m_tabs[tab].part->closeUrl();
+    m_tabs[tab].part->disconnect();
+    m_tabs[tab].part->deleteLater();
+    m_tabs.removeAt( tab );
 
     m_tabBar->removeTab( tab );
 
@@ -470,33 +471,49 @@ void Shell::closeTab( int tab )
         m_tabBar->removeTab( 0 );
 }
 
-void Shell::openTabContextMenu( int tab, QPoint point )
+void Shell::openTabContextMenu( int /*tab*/, QPoint /*point*/ )
 {
 }
 
 void Shell::moveTab( int from, int to )
 {
-    m_parts.move( from, to );
+    m_tabs.move( from, to );
 }
 
 void Shell::openNewTab( const KUrl& url )
 {
     // Tabs are hidden when there's only one, so show it
-    if( m_parts.size() == 1 )
+    if( m_tabs.size() == 1 )
     {
-        m_tabBar->addTab( m_parts[0]->url().fileName() );
+        m_tabBar->addTab( m_tabs[0].part->url().fileName() );
     }
 
     // Make new part
-    m_parts.append( m_partFactory->create<KParts::ReadWritePart>(this) );
-    m_parts.last()->openUrl( url );
+    m_tabs.append( m_partFactory->create<KParts::ReadWritePart>(this) );
+    m_tabs.last().part->openUrl( url );
+    connectPart( m_tabs.last().part );
 
     // Update GUI
-    m_activeTab = m_parts.size() - 1;
-    m_viewStack->addWidget( m_parts.last()->widget() );
+    m_activeTab = m_tabs.size() - 1;
+    m_viewStack->addWidget( m_tabs.last().part->widget() );
     m_viewStack->setCurrentIndex( m_activeTab );
-    m_tabBar->addTab( m_parts.last()->url().fileName() );
+    m_tabBar->addTab( m_tabs.last().part->url().fileName() );
     m_tabBar->setCurrentIndex( m_activeTab );
+}
+
+void Shell::connectPart( QObject* part )
+{
+    // These signals and slots defined in Okular::Part, but since we don't 
+    // have access to that class, just pass in a KParts::Part* for brevity
+    connect( this, SIGNAL(restoreDocument(KConfigGroup)), part, SLOT(restoreDocument(KConfigGroup)));
+    connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
+    connect( part, SIGNAL(enablePrintAction(bool)), m_printAction, SLOT(setEnabled(bool)));
+    connect( part, SIGNAL(enableCloseAction(bool)), m_closeAction, SLOT(setEnabled(bool)));
+}
+
+void Shell::print()
+{
+    QMetaObject::invokeMethod( m_tabs[m_activeTab].part, SLOT(slotPrint()) );
 }
 
 #include "shell.moc"

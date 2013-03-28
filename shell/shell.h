@@ -95,6 +95,7 @@ private slots:
   void delayedOpen();
   void showOpenRecentMenu();
   void closeUrl();
+  void print();
 
   // Tab event handlers
   void setActiveTab( int tab );
@@ -112,12 +113,11 @@ private:
   void init();
   QStringList fileFormats() const;
   void openNewTab( const KUrl& url );
+  void connectPart( QObject* part );
 
 private:
   KCmdLineArgs* m_args;
-  KParts::ReadWritePart* m_part;
   KPluginFactory* m_partFactory;
-  KDocumentViewer* m_doc;
   KRecentFilesAction* m_recent;
   QStringList m_fileformats;
   bool m_fileformatsscanned;
@@ -131,7 +131,16 @@ private:
   QVBoxLayout* m_centralLayout;
   KTabBar* m_tabBar;
   QStackedWidget* m_viewStack;
-  QList<KParts::ReadWritePart*> m_parts;
+
+  struct TabState
+  {
+    TabState( KParts::ReadWritePart* p, bool pe = false, bool ce = false)
+      : part(p), printEnabled(pe), closeEnabled(ce) {}
+    KParts::ReadWritePart* part;
+    bool printEnabled;
+    bool closeEnabled;
+  };
+  QList<TabState> m_tabs;
   int m_activeTab;
 
 #ifdef KActivities_FOUND
