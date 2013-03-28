@@ -47,6 +47,7 @@
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <kxmlguifactory.h>
+#include <kmenu.h>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -467,7 +468,8 @@ void Shell::closeTab( int tab )
     {
         KParts::ReadWritePart* part = m_tabs[tab].part;
         m_viewStack->removeWidget( part->widget() );
-        part->factory()->removeClient( part );
+        if( part->factory() )
+            part->factory()->removeClient( part );
         part->disconnect();
         part->deleteLater();
         m_tabs.removeAt( tab );
@@ -479,8 +481,38 @@ void Shell::closeTab( int tab )
         m_tabBar->removeTab( 0 );
 }
 
-void Shell::openTabContextMenu( int /*tab*/, QPoint /*point*/ )
+void Shell::openTabContextMenu( int tab, QPoint point )
 {
+    // Mostly borrowed from DolphinMainWindow::openTabContextMenu
+    KMenu menu( this );
+    QAction* detachTabAction      = menu.addAction(KIcon("tab-detach"), i18n("Detach Tab"));
+    QAction* closeOtherTabsAction = menu.addAction(KIcon("tab-close-other"), i18n("Close Other Tabs"));
+    QAction* closeTabAction       = menu.addAction(KIcon("tab-close"), i18n("Close Tab"));
+    closeTabAction->setShortcut( m_closeAction->shortcut().primary() );
+    closeTabAction->setEnabled( m_tabs[tab].closeEnabled );
+
+    QAction* selAction = menu.exec( point );
+
+    if( selAction == detachTabAction )
+    {
+        Shell* shell = new Shell;
+        shell->openUrl( m_tabs[tab].part->url() );
+        shell->show();
+        closeTab( tab );
+    }
+    else if( selAction == closeOtherTabsAction )
+    {
+        int count = m_tabs.size();
+        for( int i = 0; i < tab; ++i )
+            closeTab(0);
+
+        for( int i = tab+1; i < count; ++i )
+            closeTab(1);
+    }
+    else if( selAction == closeTabAction )
+    {
+        closeTab( tab );
+    }
 }
 
 void Shell::moveTab( int from, int to )
