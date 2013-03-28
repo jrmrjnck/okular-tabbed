@@ -96,6 +96,8 @@ private slots:
   void showOpenRecentMenu();
   void closeUrl();
   void print();
+  void setPrintEnabled( bool enabled );
+  void setCloseEnabled( bool enabled );
 
   // Tab event handlers
   void setActiveTab( int tab );
@@ -134,8 +136,11 @@ private:
 
   struct TabState
   {
-    TabState( KParts::ReadWritePart* p, bool pe = false, bool ce = false)
-      : part(p), printEnabled(pe), closeEnabled(ce) {}
+    TabState( KParts::ReadWritePart* p )
+      : part(p), 
+        printEnabled(false), 
+        closeEnabled(false) 
+    {}
     KParts::ReadWritePart* part;
     bool printEnabled;
     bool closeEnabled;

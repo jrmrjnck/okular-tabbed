@@ -46,6 +46,7 @@
 #include <ktabbar.h>
 #include <QVBoxLayout>
 #include <QStackedWidget>
+#include <kxmlguifactory.h>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -112,7 +113,7 @@ void Shell::init()
     m_centralLayout->addWidget( m_viewStack );
     setCentralWidget( centralWidget );
 
-    m_tabs.append( TabState(firstPart) );
+    m_tabs.append( firstPart );
     m_activeTab = 0;
 
     // then, setup our actions
@@ -455,15 +456,22 @@ void Shell::setActiveTab( int tab )
     m_tabBar->setCurrentIndex( tab );
     m_viewStack->setCurrentWidget( m_tabs[tab].part->widget() );
     createGUI( m_tabs[tab].part );
+    m_printAction->setEnabled( m_tabs[tab].printEnabled );
+    m_closeAction->setEnabled( m_tabs[tab].closeEnabled );
 }
 
 void Shell::closeTab( int tab )
 {
-    m_viewStack->removeWidget( m_tabs[tab].part->widget() );
     m_tabs[tab].part->closeUrl();
-    m_tabs[tab].part->disconnect();
-    m_tabs[tab].part->deleteLater();
-    m_tabs.removeAt( tab );
+    if( m_tabs.count() > 1 )
+    {
+        KParts::ReadWritePart* part = m_tabs[tab].part;
+        m_viewStack->removeWidget( part->widget() );
+        part->factory()->removeClient( part );
+        part->disconnect();
+        part->deleteLater();
+        m_tabs.removeAt( tab );
+    }
 
     m_tabBar->removeTab( tab );
 
@@ -490,15 +498,14 @@ void Shell::openNewTab( const KUrl& url )
 
     // Make new part
     m_tabs.append( m_partFactory->create<KParts::ReadWritePart>(this) );
-    m_tabs.last().part->openUrl( url );
     connectPart( m_tabs.last().part );
 
     // Update GUI
-    m_activeTab = m_tabs.size() - 1;
     m_viewStack->addWidget( m_tabs.last().part->widget() );
-    m_viewStack->setCurrentIndex( m_activeTab );
-    m_tabBar->addTab( m_tabs.last().part->url().fileName() );
-    m_tabBar->setCurrentIndex( m_activeTab );
+    m_tabBar->addTab( url.fileName() );
+    m_tabBar->setCurrentIndex( m_tabs.size()-1 );
+
+    m_tabs.last().part->openUrl( url );
 }
 
 void Shell::connectPart( QObject* part )
@@ -507,13 +514,25 @@ void Shell::connectPart( QObject* part )
     // have access to that class, just pass in a KParts::Part* for brevity
     connect( this, SIGNAL(restoreDocument(KConfigGroup)), part, SLOT(restoreDocument(KConfigGroup)));
     connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
-    connect( part, SIGNAL(enablePrintAction(bool)), m_printAction, SLOT(setEnabled(bool)));
-    connect( part, SIGNAL(enableCloseAction(bool)), m_closeAction, SLOT(setEnabled(bool)));
+    connect( part, SIGNAL(enablePrintAction(bool)), this, SLOT(setPrintEnabled(bool)));
+    connect( part, SIGNAL(enableCloseAction(bool)), this, SLOT(setCloseEnabled(bool)));
 }
 
 void Shell::print()
 {
-    QMetaObject::invokeMethod( m_tabs[m_activeTab].part, SLOT(slotPrint()) );
+    QMetaObject::invokeMethod( m_tabs[m_activeTab].part, "slotPrint" );
+}
+
+void Shell::setPrintEnabled( bool enabled )
+{
+    m_tabs[m_activeTab].printEnabled = enabled;
+    m_printAction->setEnabled( enabled );
+}
+
+void Shell::setCloseEnabled( bool enabled )
+{
+    m_tabs[m_activeTab].closeEnabled = enabled;
+    m_closeAction->setEnabled( enabled );
 }
 
 #include "shell.moc"
