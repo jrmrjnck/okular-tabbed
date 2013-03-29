@@ -485,6 +485,7 @@ void Shell::openTabContextMenu( int tab, QPoint point )
 {
     // Mostly borrowed from DolphinMainWindow::openTabContextMenu
     KMenu menu( this );
+    QAction* dupTabAction         = menu.addAction(KIcon("tab-duplicate"), i18n("Duplicate Tab"));
     QAction* detachTabAction      = menu.addAction(KIcon("tab-detach"), i18n("Detach Tab"));
     QAction* closeOtherTabsAction = menu.addAction(KIcon("tab-close-other"), i18n("Close Other Tabs"));
     QAction* closeTabAction       = menu.addAction(KIcon("tab-close"), i18n("Close Tab"));
@@ -493,7 +494,16 @@ void Shell::openTabContextMenu( int tab, QPoint point )
 
     QAction* selAction = menu.exec( point );
 
-    if( selAction == detachTabAction )
+    if( selAction == dupTabAction )
+    {
+       m_tabs.insert( tab+1, m_partFactory->create<KParts::ReadWritePart>(this) );
+       connectPart( m_tabs[tab+1].part );
+       m_viewStack->addWidget( m_tabs[tab+1].part->widget() );
+       const KUrl& url = m_tabs[tab].part->url();
+       m_tabBar->insertTab( tab+1, getIcon(url), url.fileName() );
+       m_tabs[tab+1].part->openUrl( url );
+    }
+    else if( selAction == detachTabAction )
     {
         Shell* shell = new Shell;
         shell->openUrl( m_tabs[tab].part->url() );
