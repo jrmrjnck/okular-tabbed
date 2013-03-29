@@ -1472,6 +1472,8 @@ void Part::guiActivateEvent(KParts::GUIActivateEvent *event)
     updateViewActions();
 
     KParts::ReadWritePart::guiActivateEvent(event);
+
+    setWindowTitleFromDocument();
 }
 
 void Part::close()
