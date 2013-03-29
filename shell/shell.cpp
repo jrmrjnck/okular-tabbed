@@ -204,6 +204,7 @@ void Shell::openUrl( const KUrl & url )
         else
         {
             openNewTab( url );
+            setActiveTab( m_tabs.size()-1 );
         }
     }
     else
@@ -496,12 +497,7 @@ void Shell::openTabContextMenu( int tab, QPoint point )
 
     if( selAction == dupTabAction )
     {
-       m_tabs.insert( tab+1, m_partFactory->create<KParts::ReadWritePart>(this) );
-       connectPart( m_tabs[tab+1].part );
-       m_viewStack->addWidget( m_tabs[tab+1].part->widget() );
-       const KUrl& url = m_tabs[tab].part->url();
-       m_tabBar->insertTab( tab+1, getIcon(url), url.fileName() );
-       m_tabs[tab+1].part->openUrl( url );
+        openNewTab( m_tabs[tab].part->url(), tab+1 );
     }
     else if( selAction == detachTabAction )
     {
@@ -530,7 +526,7 @@ void Shell::moveTab( int from, int to )
     m_tabs.move( from, to );
 }
 
-void Shell::openNewTab( const KUrl& url )
+void Shell::openNewTab( const KUrl& url, int desiredIndex )
 {
     // Tabs are hidden when there's only one, so show it
     if( m_tabs.size() == 1 )
@@ -539,16 +535,21 @@ void Shell::openNewTab( const KUrl& url )
         m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
     }
 
+    if( desiredIndex > m_tabs.size() )
+       desiredIndex = m_tabs.size();
+
+    int newIndex = (desiredIndex >= 0) ? desiredIndex : m_tabs.size();
+
     // Make new part
-    m_tabs.append( m_partFactory->create<KParts::ReadWritePart>(this) );
-    connectPart( m_tabs.last().part );
+    m_tabs.insert( newIndex, m_partFactory->create<KParts::ReadWritePart>(this) );
+    connectPart( m_tabs[newIndex].part );
 
     // Update GUI
-    m_viewStack->addWidget( m_tabs.last().part->widget() );
-    m_tabBar->addTab( getIcon(url), url.fileName() );
-    m_tabBar->setCurrentIndex( m_tabs.size()-1 );
+    m_viewStack->addWidget( m_tabs[newIndex].part->widget() );
+    m_tabBar->insertTab( newIndex, getIcon(url), url.fileName() );
 
-    m_tabs.last().part->openUrl( url );
+    if( m_tabs[newIndex].part->openUrl(url) )
+        m_recent->addUrl( url );
 }
 
 void Shell::connectPart( QObject* part )

@@ -114,7 +114,7 @@ private:
   void setupActions();
   void init();
   QStringList fileFormats() const;
-  void openNewTab( const KUrl& url );
+  void openNewTab( const KUrl& url, int desiredIndex = -1 );
   void connectPart( QObject* part );
   KIcon getIcon( const KUrl& url );
 
