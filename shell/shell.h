@@ -116,6 +116,7 @@ private:
   QStringList fileFormats() const;
   void openNewTab( const KUrl& url );
   void connectPart( QObject* part );
+  KIcon getIcon( const KUrl& url );
 
 private:
   KCmdLineArgs* m_args;

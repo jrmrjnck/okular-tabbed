@@ -525,7 +525,8 @@ void Shell::openNewTab( const KUrl& url )
     // Tabs are hidden when there's only one, so show it
     if( m_tabs.size() == 1 )
     {
-        m_tabBar->addTab( m_tabs[0].part->url().fileName() );
+        KUrl firstUrl = m_tabs[0].part->url();
+        m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
     }
 
     // Make new part
@@ -534,7 +535,7 @@ void Shell::openNewTab( const KUrl& url )
 
     // Update GUI
     m_viewStack->addWidget( m_tabs.last().part->widget() );
-    m_tabBar->addTab( url.fileName() );
+    m_tabBar->addTab( getIcon(url), url.fileName() );
     m_tabBar->setCurrentIndex( m_tabs.size()-1 );
 
     m_tabs.last().part->openUrl( url );
@@ -565,6 +566,11 @@ void Shell::setCloseEnabled( bool enabled )
 {
     m_tabs[m_activeTab].closeEnabled = enabled;
     m_closeAction->setEnabled( enabled );
+}
+
+KIcon Shell::getIcon( const KUrl& url )
+{
+    return KIcon(KMimeType::findByUrl(url)->iconName());
 }
 
 #include "shell.moc"
