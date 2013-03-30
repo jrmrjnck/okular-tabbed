@@ -97,6 +97,7 @@ void Shell::init()
     m_tabBar = new KTabBar( this );
     m_tabBar->setMovable( true );
     m_tabBar->setTabsClosable( true );
+    m_tabBar->setElideMode( Qt::ElideRight );
     connect( m_tabBar, SIGNAL(currentChanged(int)), SLOT(setActiveTab(int)) );
     connect( m_tabBar, SIGNAL(tabCloseRequested(int)), SLOT(closeTab(int)) );
     connect( m_tabBar, SIGNAL(contextMenu(int,QPoint)), SLOT(openTabContextMenu(int,QPoint)) );
@@ -498,6 +499,7 @@ void Shell::openTabContextMenu( int tab, QPoint point )
     if( selAction == dupTabAction )
     {
         openNewTab( m_tabs[tab].part->url(), tab+1 );
+        m_tabBar->setTabText( tab+1, m_tabBar->tabText(tab) );
     }
     else if( selAction == detachTabAction )
     {
@@ -582,6 +584,15 @@ void Shell::setCloseEnabled( bool enabled )
 KIcon Shell::getIcon( const KUrl& url )
 {
     return KIcon(KMimeType::findByUrl(url)->iconName());
+}
+
+void Shell::setCaption( const QString& title )
+{
+   // Can only get this signal from the currently active part
+   // This keeps tab text consistent with window title
+   m_tabBar->setTabText( m_activeTab, title );
+   m_tabBar->setTabToolTip( m_activeTab, title );
+   KParts::MainWindow::setCaption( title );
 }
 
 #include "shell.moc"

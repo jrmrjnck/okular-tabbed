@@ -47,6 +47,7 @@ class Shell : public KParts::MainWindow
 {
   Q_OBJECT
   Q_CLASSINFO("D-Bus Interface", "org.kde.okular")
+  using KMainWindow::setCaption;
 
 public:
   /**
@@ -62,6 +63,8 @@ public:
   QSize sizeHint() const;
 public slots:
   void slotQuit();
+
+  void setCaption( const QString& title );
   
   Q_SCRIPTABLE Q_NOREPLY void tryRaise();
 
