@@ -47,7 +47,6 @@ class Shell : public KParts::MainWindow
 {
   Q_OBJECT
   Q_CLASSINFO("D-Bus Interface", "org.kde.okular")
-  using KMainWindow::setCaption;
 
 public:
   /**
@@ -61,6 +60,11 @@ public:
   virtual ~Shell();
 
   QSize sizeHint() const;
+
+  // Bring base class setCaption() functions into scope
+  // so they aren't hidden by our reimplementation
+  using KParts::MainWindow::setCaption;
+
 public slots:
   void slotQuit();
 
