@@ -111,6 +111,8 @@ private slots:
   void closeTab( int tab );
   void openTabContextMenu( int tab, QPoint point );
   void moveTab( int from, int to );
+  void activateNextTab();
+  void activatePrevTab();
 
 signals:
   void restoreDocument(const KConfigGroup &group);
@@ -155,6 +157,8 @@ private:
   };
   QList<TabState> m_tabs;
   int m_activeTab;
+  KAction* m_nextTabAction;
+  KAction* m_prevTabAction;
 
 #ifdef KActivities_FOUND
   KActivities::ResourceInstance* m_activityResource;

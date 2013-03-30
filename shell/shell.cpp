@@ -290,6 +290,18 @@ void Shell::setupActions()
 
   m_showMenuBarAction = KStandardAction::showMenubar( this, SLOT(slotShowMenubar()), actionCollection());
   m_fullScreenAction = KStandardAction::fullScreen( this, SLOT(slotUpdateFullScreen()), this,actionCollection() );
+
+    m_nextTabAction = actionCollection()->addAction("tab-next");
+    m_nextTabAction->setText( i18n("Next Tab") );
+    m_nextTabAction->setShortcut( QKeySequence::NextChild );
+    m_nextTabAction->setEnabled( false );
+    connect( m_nextTabAction, SIGNAL(triggered()), this, SLOT(activateNextTab()) );
+
+    m_prevTabAction = actionCollection()->addAction("tab-previous");
+    m_prevTabAction->setText( i18n("Previous Tab") );
+    m_prevTabAction->setShortcut( QKeySequence::PreviousChild );
+    m_prevTabAction->setEnabled( false );
+    connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
 }
 
 void Shell::saveProperties(KConfigGroup &group)
@@ -480,7 +492,11 @@ void Shell::closeTab( int tab )
     m_tabBar->removeTab( tab );
 
     if( m_tabBar->count() == 1 )
+    {
         m_tabBar->removeTab( 0 );
+        m_nextTabAction->setEnabled( false );
+        m_prevTabAction->setEnabled( false );
+    }
 }
 
 void Shell::openTabContextMenu( int tab, QPoint point )
@@ -535,6 +551,8 @@ void Shell::openNewTab( const KUrl& url, int desiredIndex )
     {
         KUrl firstUrl = m_tabs[0].part->url();
         m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
+        m_nextTabAction->setEnabled( true );
+        m_prevTabAction->setEnabled( true );
     }
 
     if( desiredIndex > m_tabs.size() )
@@ -588,11 +606,31 @@ KIcon Shell::getIcon( const KUrl& url )
 
 void Shell::setCaption( const QString& title )
 {
-   // Can only get this signal from the currently active part
-   // This keeps tab text consistent with window title
-   m_tabBar->setTabText( m_activeTab, title );
-   m_tabBar->setTabToolTip( m_activeTab, title );
-   KParts::MainWindow::setCaption( title );
+    // Can only get this signal from the currently active part
+    // This keeps tab text consistent with window title
+    m_tabBar->setTabText( m_activeTab, title );
+    m_tabBar->setTabToolTip( m_activeTab, title );
+    KParts::MainWindow::setCaption( title );
+}
+
+void Shell::activateNextTab()
+{
+    if( m_tabs.size() < 2 )
+        return;
+
+    int nextTab = (m_activeTab == m_tabs.size()-1) ? 0 : m_activeTab+1;
+
+    setActiveTab( nextTab );
+}
+
+void Shell::activatePrevTab()
+{
+    if( m_tabs.size() < 2 )
+        return;
+
+    int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
+
+    setActiveTab( prevTab );
 }
 
 #include "shell.moc"
