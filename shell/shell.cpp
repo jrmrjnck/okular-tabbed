@@ -128,11 +128,6 @@ void Shell::init()
 
     readSettings();
 
-    if (m_args && m_args->isSet("unique") && m_args->count() == 1)
-    {
-        QDBusConnection::sessionBus().registerService("org.kde.okular");
-    }
-
     m_unique = false;
     if (m_args && m_args->isSet("unique") && m_args->count() <= 1)
     {
