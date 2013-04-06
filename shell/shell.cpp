@@ -130,7 +130,7 @@ void Shell::init()
     readSettings();
 
     m_unique = false;
-    if (m_args && m_args->isSet("unique") && m_args->count() <= 1)
+    if (m_args && m_args->isSet("unique") )
     {
         m_unique = QDBusConnection::sessionBus().registerService("org.kde.okular");
         if (!m_unique)
@@ -183,8 +183,15 @@ Shell::~Shell()
            it->part->closeUrl( false );
         }
     }
+    if( m_unique )
+        QDBusConnection::sessionBus().unregisterService( "org.kde.okular" );
     if ( m_args )
         m_args->clear();
+}
+
+void Shell::openDocument( const QString& doc )
+{
+    openUrl( ShellUtils::urlFromArg(doc,ShellUtils::qfileExistFunc()) );
 }
 
 void Shell::openUrl( const KUrl & url )
@@ -410,7 +417,7 @@ bool Shell::event( QEvent* event )
 {
     if( event->type() == QEvent::WindowActivate )
     {
-        m_lastActivationTime = QTime::currentTime();
+        m_lastActivationTime = QDateTime::currentDateTime();
     }
     return KParts::MainWindow::event( event );
 }
@@ -523,7 +530,7 @@ void Shell::openTabContextMenu( int tab, QPoint point )
     {
         // Split detached tab into new process
         QStringList runCmd;
-        runCmd << kapp->applicationFilePath() << m_tabs[tab].part->url().url();
+        runCmd << kapp->applicationFilePath() << "--new" << m_tabs[tab].part->url().url();
         closeTab( tab );
         KProcess::startDetached( runCmd );
     }
@@ -636,7 +643,7 @@ void Shell::activatePrevTab()
     setActiveTab( prevTab );
 }
 
-QTime Shell::lastActivationTime()
+QDateTime Shell::lastActivationTime()
 {
     return m_lastActivationTime;
 }

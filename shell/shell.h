@@ -71,7 +71,8 @@ public slots:
   void setCaption( const QString& title );
   
   Q_SCRIPTABLE Q_NOREPLY void tryRaise();
-  Q_SCRIPTABLE QTime lastActivationTime();
+  Q_SCRIPTABLE QDateTime lastActivationTime();
+  Q_SCRIPTABLE Q_NOREPLY void openDocument( const QString& doc );
 
 protected:
   /**
@@ -162,7 +163,7 @@ private:
   KAction* m_nextTabAction;
   KAction* m_prevTabAction;
 
-  QTime m_lastActivationTime;
+  QDateTime m_lastActivationTime;
 
 #ifdef KActivities_FOUND
   KActivities::ResourceInstance* m_activityResource;

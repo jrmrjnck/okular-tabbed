@@ -26,20 +26,69 @@ static bool attachUniqueInstance(KCmdLineArgs* args)
     if (!args->isSet("unique") || args->count() != 1)
         return false;
 
-    QDBusInterface iface("org.kde.okular", "/okular", "org.kde.okular");
-    QDBusInterface iface2("org.kde.okular", "/okularshell", "org.kde.okular");
+    QDBusInterface iface("org.kde.okular", "/okular1", "org.kde.okular");
+    QDBusInterface iface2("org.kde.okular", "/okularshell", "org.kde.okularshell");
     if (!iface.isValid() || !iface2.isValid())
         return false;
 
     if (args->isSet("print"))
-	iface.call("enableStartWithPrint");
+        iface.call("enableStartWithPrint");
     if (args->isSet("page"))
         iface.call("openDocument", ShellUtils::urlFromArg(args->arg(0), ShellUtils::qfileExistFunc(), args->getOption("page")).url());
     else
         iface.call("openDocument", ShellUtils::urlFromArg(args->arg(0), ShellUtils::qfileExistFunc()).url());
     if (args->isSet("raise")){
-	iface2.call("tryRaise");
+        iface2.call("tryRaise");
     }
+
+    return true;
+}
+
+static bool attachExistingInstance( KCmdLineArgs* args )
+{
+    if( args->isSet("new") || args->count() == 0 )
+        return false;
+
+    QStringList services = QDBusConnection::sessionBus().interface()->registeredServiceNames().value();
+
+    // Dont match the service without trailing "-" b/c that's the unique instance
+    QString pattern = "org.kde.okular-";
+    QString myPid = QString::number(kapp->applicationPid());
+    QDBusInterface* bestService = NULL;
+    QDateTime latestTime;
+    latestTime.setMSecsSinceEpoch( 0 );
+
+    foreach( const QString& service, services )
+    {
+        // Query all services to find the last activated instance
+        if( service.startsWith(pattern) && !service.endsWith(myPid) )
+        {
+            QDBusInterface* iface = new QDBusInterface( service, QLatin1String("/okularshell"), QLatin1String("org.kde.okularshell") );
+            QDBusReply<QDateTime> reply = iface->call( QLatin1String("lastActivationTime") );
+            if( reply.isValid() )
+            {
+                QDateTime time = reply.value();
+                if( time > latestTime )
+                {
+                    latestTime = time;
+                    delete bestService;
+                    bestService = iface;
+                    iface = NULL;
+                }
+            }
+            delete iface;
+        }
+    }
+
+    if( bestService == NULL )
+        return false;
+
+    for( int i = 0; i < args->count(); ++i )
+    {
+        bestService->call( QLatin1String("openDocument"), args->arg(i) );
+    }
+
+    delete bestService;
 
     return true;
 }
@@ -57,6 +106,7 @@ int main(int argc, char** argv)
     options.add("print", ki18n("Start with print dialog"));
     options.add("unique", ki18n("\"Unique instance\" control"));
     options.add("noraise", ki18n("Not raise window"));
+    options.add("new", ki18n("Force start of new instance"));
     options.add("+[URL]", ki18n("Document to open. Specify '-' to read from stdin."));
     KCmdLineArgs::addCmdLineOptions( options );
     KApplication app;
@@ -69,27 +119,18 @@ int main(int argc, char** argv)
         // no session.. just start up normally
         KCmdLineArgs* args = KCmdLineArgs::parsedArgs();
 
-        // try to attach the "unique" session: if we succeed, do nothing more and exit
-        if (attachUniqueInstance(args))
+        // try to attach to an existing instance, unique or otherwise
+        if( attachUniqueInstance(args) || attachExistingInstance(args) )
         {
             args->clear();
             return 0;
         }
 
-        if (args->isSet( "unique" ) && args->count() > 1)
-        {
-            QTextStream stream(stderr);
-            stream << i18n( "Error: Can't open more than one document with the --unique switch" ) << endl;
-            return -1;
-        }
-        else
-        {
-            Shell* widget = new Shell(args);
-            widget->show();
-        }
+        Shell* widget = new Shell(args);
+        widget->show();
     }
 
     return app.exec();
 }
 
-// vim:ts=2:sw=2:tw=78:et
+// vim:ts=4:sw=4:tw=78:et
