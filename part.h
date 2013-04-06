@@ -332,6 +332,8 @@ class OKULAR_PART_EXPORT Part : public KParts::ReadWritePart, public Okular::Doc
         KXMLGUIClient *m_generatorGuiClient;
         FileKeeper *m_keeper;
 
+        QString m_dbusObjectName;
+
     private slots:
         void slotGeneratorPreferences();
         void slotHandleActivatedSourceReference(const QString& absFileName, int line, int col, bool *handled);

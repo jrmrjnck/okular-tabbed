@@ -284,12 +284,20 @@ namespace Okular
 {
 
 Part::Part(QWidget *parentWidget,
-QObject *parent,
-const QVariantList &args,
-KComponentData componentData )
-: KParts::ReadWritePart(parent),
-m_tempfile( 0 ), m_fileWasRemoved( false ), m_showMenuBarAction( 0 ), m_showFullScreenAction( 0 ), m_actionsSearched( false ),
-m_cliPresentation(false), m_cliPrint(false), m_embedMode(detectEmbedMode(parentWidget, parent, args)), m_generatorGuiClient(0), m_keeper( 0 )
+           QObject *parent,
+           const QVariantList &args,
+           KComponentData componentData )
+ : KParts::ReadWritePart(parent),
+   m_tempfile( 0 ), 
+   m_fileWasRemoved( false ), 
+   m_showMenuBarAction( 0 ), 
+   m_showFullScreenAction( 0 ), 
+   m_actionsSearched( false ),
+   m_cliPresentation(false), 
+   m_cliPrint(false), 
+   m_embedMode(detectEmbedMode(parentWidget, parent, args)), 
+   m_generatorGuiClient(0), 
+   m_keeper( 0 )
 {
     // first, we check if a config file name has been specified
     QString configFileName = detectConfigFileName( args );
@@ -307,11 +315,8 @@ m_cliPresentation(false), m_cliPrint(false), m_embedMode(detectEmbedMode(parentW
     Okular::Settings::instance( configFileName );
     
     numberOfParts++;
-    if (numberOfParts == 1) {
-        QDBusConnection::sessionBus().registerObject("/okular", this, QDBusConnection::ExportScriptableSlots);
-    } else {
-        QDBusConnection::sessionBus().registerObject(QString("/okular%1").arg(numberOfParts), this, QDBusConnection::ExportScriptableSlots);
-    }
+    m_dbusObjectName = QString::fromLatin1("/okular%1").arg(numberOfParts);
+    QDBusConnection::sessionBus().registerObject( m_dbusObjectName, this, QDBusConnection::ExportScriptableSlots );
 
     // connect the started signal to tell the job the mimetypes we like,
     // and get some more information from it
@@ -812,6 +817,8 @@ Part::~Part()
 
     if ( m_document->isOpened() )
         Part::closeUrl( false );
+
+    QDBusConnection::sessionBus().unregisterObject( m_dbusObjectName );
 
     delete m_toc;
     delete m_pageView;

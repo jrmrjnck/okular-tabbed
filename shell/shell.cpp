@@ -386,10 +386,7 @@ void Shell::slotQuit()
 
 void Shell::tryRaise()
 {
-    if (m_unique)
-    {
-        KWindowSystem::forceActiveWindow( window()->effectiveWinId() );
-    }
+    KWindowSystem::forceActiveWindow( window()->effectiveWinId() );
 }
 
 // only called when starting the program
@@ -407,6 +404,15 @@ void Shell::showEvent(QShowEvent *e)
         m_showMenuBarAction->setChecked( menuBar()->isVisible() );
 
     KParts::MainWindow::showEvent(e);
+}
+
+bool Shell::event( QEvent* event )
+{
+    if( event->type() == QEvent::WindowActivate )
+    {
+        m_lastActivationTime = QTime::currentTime();
+    }
+    return KParts::MainWindow::event( event );
 }
 
 void Shell::slotUpdateFullScreen()
@@ -518,9 +524,8 @@ void Shell::openTabContextMenu( int tab, QPoint point )
         // Split detached tab into new process
         QStringList runCmd;
         runCmd << kapp->applicationFilePath() << m_tabs[tab].part->url().url();
-        KProcess::startDetached( runCmd );
-
         closeTab( tab );
+        KProcess::startDetached( runCmd );
     }
     else if( selAction == closeOtherTabsAction )
     {
@@ -629,6 +634,11 @@ void Shell::activatePrevTab()
     int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
 
     setActiveTab( prevTab );
+}
+
+QTime Shell::lastActivationTime()
+{
+    return m_lastActivationTime;
 }
 
 #include "shell.moc"
