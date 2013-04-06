@@ -48,6 +48,7 @@
 #include <QStackedWidget>
 #include <kxmlguifactory.h>
 #include <kmenu.h>
+#include <kprocess.h>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -514,9 +515,11 @@ void Shell::openTabContextMenu( int tab, QPoint point )
     }
     else if( selAction == detachTabAction )
     {
-        Shell* shell = new Shell;
-        shell->openUrl( m_tabs[tab].part->url() );
-        shell->show();
+        // Split detached tab into new process
+        QStringList runCmd;
+        runCmd << kapp->applicationFilePath() << m_tabs[tab].part->url().url();
+        KProcess::startDetached( runCmd );
+
         closeTab( tab );
     }
     else if( selAction == closeOtherTabsAction )
