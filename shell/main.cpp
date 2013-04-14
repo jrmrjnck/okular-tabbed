@@ -20,6 +20,7 @@
 #include <QTextStream>
 #include "aboutdata.h"
 #include "shellutils.h"
+#include <iostream>
 
 static bool attachUniqueInstance(KCmdLineArgs* args)
 {
@@ -87,6 +88,8 @@ static bool attachExistingInstance( KCmdLineArgs* args )
     {
         bestService->call( QLatin1String("openDocument"), args->arg(i) );
     }
+
+    bestService->call( "tryRaise" );
 
     delete bestService;
 
