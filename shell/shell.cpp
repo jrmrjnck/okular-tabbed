@@ -622,14 +622,40 @@ void Shell::print()
 
 void Shell::setPrintEnabled( bool enabled )
 {
-    m_tabs[m_activeTab].printEnabled = enabled;
-    m_printAction->setEnabled( enabled );
+    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
+    KParts::ReadWritePart* part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( part == NULL )
+       return;
+
+    for( int i = 0; i < m_tabs.size(); ++i )
+    {
+       if( m_tabs[i].part == part )
+       {
+          m_tabs[i].printEnabled = enabled;
+          if( i == m_activeTab )
+             m_printAction->setEnabled( enabled );
+          break;
+       }
+    }
 }
 
 void Shell::setCloseEnabled( bool enabled )
 {
-    m_tabs[m_activeTab].closeEnabled = enabled;
-    m_closeAction->setEnabled( enabled );
+    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
+    KParts::ReadWritePart* part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( part == NULL )
+       return;
+
+    for( int i = 0; i < m_tabs.size(); ++i )
+    {
+       if( m_tabs[i].part == part )
+       {
+          m_tabs[i].closeEnabled = enabled;
+          if( i == m_activeTab )
+             m_closeAction->setEnabled( enabled );
+          break;
+       }
+    }
 }
 
 KIcon Shell::getIcon( const KUrl& url )
