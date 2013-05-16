@@ -66,8 +66,6 @@ public:
   using KParts::MainWindow::setCaption;
 
 public slots:
-  void slotQuit();
-
   void setCaption( const QString& title );
   
   Q_SCRIPTABLE Q_NOREPLY void tryRaise();
@@ -117,6 +115,8 @@ private slots:
   void activateNextTab();
   void activatePrevTab();
 
+  void recordConfirmTabsClose();
+
 signals:
   void restoreDocument(const KConfigGroup &group);
   void saveDocumentRestoreInfo(KConfigGroup &group);
@@ -162,6 +162,7 @@ private:
   int m_activeTab;
   KAction* m_nextTabAction;
   KAction* m_prevTabAction;
+  KAction* m_confirmTabsClose;
 
   QDateTime m_lastActivationTime;
 

@@ -49,6 +49,7 @@
 #include <kxmlguifactory.h>
 #include <kmenu.h>
 #include <kprocess.h>
+#include <ktoggleaction.h>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -287,7 +288,7 @@ void Shell::setupActions()
   m_printAction->setEnabled( false );
   m_closeAction = KStandardAction::close( this, SLOT(closeUrl()), actionCollection() );
   m_closeAction->setEnabled( false );
-  KStandardAction::quit(this, SLOT(slotQuit()), actionCollection());
+  KStandardAction::quit(this, SLOT(close()), actionCollection());
 
   setStandardToolBarMenuEnabled(true);
 
@@ -305,6 +306,12 @@ void Shell::setupActions()
     m_prevTabAction->setShortcut( QKeySequence::PreviousChild );
     m_prevTabAction->setEnabled( false );
     connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
+
+    KConfigGroup group = KGlobal::config()->group( "Notification Messages" );
+    m_confirmTabsClose = actionCollection()->add<KToggleAction>("confirm_tabs_close");
+    m_confirmTabsClose->setText(i18n("Confirm Closing Multiple Tabs"));
+    m_confirmTabsClose->setChecked( !group.hasKey("CloseMultipleTabs") );
+    connect( m_confirmTabsClose, SIGNAL(triggered()), this, SLOT(recordConfirmTabsClose()) );
 }
 
 void Shell::saveProperties(KConfigGroup &group)
@@ -386,11 +393,6 @@ void Shell::fileOpen()
     }
 }
 
-void Shell::slotQuit()
-{
-    close();
-}
-
 void Shell::tryRaise()
 {
     KWindowSystem::forceActiveWindow( window()->effectiveWinId() );
@@ -463,6 +465,27 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
+    if( m_tabs.size() > 1 )
+    {
+        int sel = KMessageBox::warningYesNoCancel(
+           this,
+           i18n("You have multiple tabs open in this window, are you sure you want to quit?"),
+           i18n("Confimation"),
+           KStandardGuiItem::quit(),
+           KGuiItem(i18n("Close Current Tab"),"tab-close"),
+           KStandardGuiItem::cancel(),
+           i18n("CloseMultipleTabs") );
+
+        if( sel == KMessageBox::Cancel )
+            return false;
+
+        if( sel == KMessageBox::No )
+        {
+           closeTab( m_activeTab );
+           return false;
+        }
+    }
+
     bool ret = true;
     for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
     {
@@ -646,6 +669,21 @@ void Shell::activatePrevTab()
 QDateTime Shell::lastActivationTime()
 {
     return m_lastActivationTime;
+}
+
+void Shell::recordConfirmTabsClose()
+{
+   KConfigGroup group = KGlobal::config()->group( "Notification Messages" );
+   if( m_confirmTabsClose->isChecked() )
+   {
+      // Show dialog if checked
+      group.deleteEntry( "CloseMultipleTabs" );
+   }
+   else
+   {
+      // Full quit if un-checked
+      group.writeEntry( "CloseMultipleTabs", true );
+   }
 }
 
 #include "shell.moc"
