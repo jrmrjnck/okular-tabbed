@@ -10,6 +10,7 @@
 
 #include "document.h"
 #include "document_p.h"
+#include "documentcommands_p.h"
 
 #include <limits.h>
 #ifdef Q_OS_WIN
@@ -33,6 +34,7 @@
 #include <QtGui/QLabel>
 #include <QtGui/QPrinter>
 #include <QtGui/QPrintDialog>
+#include <QUndoCommand>
 
 #include <kaboutdata.h>
 #include <kauthorized.h>
@@ -85,6 +87,7 @@
 #include <memory>
 
 #include <config-okular.h>
+#include <ui/guiutils.h>
 
 using namespace Okular;
 
@@ -162,7 +165,7 @@ QString DocumentPrivate::namePaperSize(double inchesWidth, double inchesHeight) 
 
     const QPrinter::Orientation orientation = inchesWidth > inchesHeight ? QPrinter::Landscape : QPrinter::Portrait;
     // enforce portrait mode for further tests
-    if (inchesWidth > inchesHeight) 
+    if (inchesWidth > inchesHeight)
         qSwap(inchesWidth, inchesHeight);
 
     // Use QPrinter to find which of the predefined paper sizes
@@ -1029,6 +1032,157 @@ void DocumentPrivate::warnLimitedAnnotSupport()
     }
 }
 
+void DocumentPrivate::performAddPageAnnotation( int page, Annotation * annotation )
+{
+    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( m_generator );
+    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
+
+    // find out the page to attach annotation
+    Page * kp = m_pagesVector[ page ];
+    if ( !m_generator || !kp )
+        return;
+
+    // the annotation belongs already to a page
+    if ( annotation->d_ptr->m_page )
+        return;
+
+    // add annotation to the page
+    kp->addAnnotation( annotation );
+
+    // tell the annotation proxy
+    if ( proxy && proxy->supports(AnnotationProxy::Addition) )
+        proxy->notifyAddition( annotation, page );
+
+    // notify observers about the change
+    notifyAnnotationChanges( page );
+
+    if ( annotation->flags() & Annotation::ExternallyDrawn )
+    {
+        // Redraw everything, including ExternallyDrawn annotations
+        refreshPixmaps( page );
+    }
+
+    warnLimitedAnnotSupport();
+}
+
+void DocumentPrivate::performRemovePageAnnotation( int page, Annotation * annotation )
+{
+    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( m_generator );
+    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
+    bool isExternallyDrawn;
+
+    // find out the page
+    Page * kp = m_pagesVector[ page ];
+    if ( !m_generator || !kp )
+        return;
+
+    if ( annotation->flags() & Annotation::ExternallyDrawn )
+        isExternallyDrawn = true;
+    else
+        isExternallyDrawn = false;
+
+    // try to remove the annotation
+    if ( m_parent->canRemovePageAnnotation( annotation ) )
+    {
+        // tell the annotation proxy
+        if ( proxy && proxy->supports(AnnotationProxy::Removal) )
+            proxy->notifyRemoval( annotation, page );
+
+        kp->removeAnnotation( annotation ); // Also destroys the object
+
+        // in case of success, notify observers about the change
+        notifyAnnotationChanges( page );
+
+        if ( isExternallyDrawn )
+        {
+            // Redraw everything, including ExternallyDrawn annotations
+            refreshPixmaps( page );
+        }
+    }
+
+    warnLimitedAnnotSupport();
+}
+
+void DocumentPrivate::performModifyPageAnnotation( int page, Annotation * annotation, bool appearanceChanged )
+{
+    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( m_generator );
+    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
+
+    // find out the page
+    Page * kp = m_pagesVector[ page ];
+    if ( !m_generator || !kp )
+        return;
+
+    // tell the annotation proxy
+    if ( proxy && proxy->supports(AnnotationProxy::Modification) )
+    {
+        proxy->notifyModification( annotation, page, appearanceChanged );
+    }
+
+    // notify observers about the change
+    notifyAnnotationChanges( page );
+    if ( appearanceChanged && (annotation->flags() & Annotation::ExternallyDrawn) )
+    {
+        /* When an annotation is being moved, the generator will not render it.
+         * Therefore there's no need to refresh pixmaps after the first time */
+        if ( annotation->flags() & Annotation::BeingMoved )
+        {
+            if ( m_annotationBeingMoved )
+                return;
+            else // First time: take note
+                m_annotationBeingMoved = true;
+        }
+        else
+        {
+            m_annotationBeingMoved = false;
+        }
+
+        // Redraw everything, including ExternallyDrawn annotations
+        kDebug(OkularDebug) << "Refreshing Pixmaps";
+        refreshPixmaps( page );
+    }
+
+    // If the user is moving the annotation, don't steal the focus
+    if ( (annotation->flags() & Annotation::BeingMoved) == 0 )
+        warnLimitedAnnotSupport();
+}
+
+void DocumentPrivate::performSetAnnotationContents( const QString & newContents, Annotation *annot, int pageNumber )
+{
+    bool appearanceChanged = false;
+
+    // Check if appearanceChanged should be true
+    switch ( annot->subType() )
+    {
+        // If it's an in-place TextAnnotation, set the inplace text
+        case Okular::Annotation::AText:
+        {
+            Okular::TextAnnotation * txtann = static_cast< Okular::TextAnnotation * >( annot );
+            if ( txtann->textType() == Okular::TextAnnotation::InPlace )
+            {
+                appearanceChanged = true;
+            }
+            break;
+        }
+        // If it's a LineAnnotation, check if caption text is visible
+        case Okular::Annotation::ALine:
+        {
+            Okular::LineAnnotation * lineann = static_cast< Okular::LineAnnotation * >( annot );
+            if ( lineann->showCaption() )
+                appearanceChanged = true;
+            break;
+        }
+        default:
+            break;
+    }
+
+    // Set contents
+    annot->setContents( newContents );
+
+    // Tell the document the annotation has been modified
+    performModifyPageAnnotation( pageNumber,  annot, appearanceChanged );
+}
+
 void DocumentPrivate::saveDocumentInfo() const
 {
     if ( m_xmlFileName.isEmpty() )
@@ -1393,8 +1547,6 @@ void DocumentPrivate::refreshPixmaps( int pageNumber )
     for ( ; it != itEnd; ++it )
     {
         QSize size = (*it).m_pixmap->size();
-        if ( (*it).m_rotation % 2 )
-            size.transpose();
         PixmapRequest * p = new PixmapRequest( it.key(), pageNumber, size.width(), size.height(), 1, PixmapRequest::Asynchronous );
         p->d->mForce = true;
         requestedPixmaps.push_back( p );
@@ -1511,7 +1663,7 @@ void DocumentPrivate::doContinueDirectionMatchSearch(void *doContinueDirectionMa
         {
             searchStruct->pagesDone = 1;
         }
-        
+
         // Both of the previous if branches need to call doContinueDirectionMatchSearch
         QMetaObject::invokeMethod(m_parent, "doContinueDirectionMatchSearch", Qt::QueuedConnection, Q_ARG(void *, searchStruct));
     }
@@ -1843,8 +1995,7 @@ QVariant DocumentPrivate::documentMetaData( const QString &key, const QVariant &
         }
     }
     return QVariant();
-}
-
+};
 
 Document::Document( QWidget *widget )
     : QObject( 0 ), d( new DocumentPrivate( this ) )
@@ -1852,11 +2003,14 @@ Document::Document( QWidget *widget )
     d->m_widget = widget;
     d->m_bookmarkManager = new BookmarkManager( d );
     d->m_viewportIterator = d->m_viewportHistory.insert( d->m_viewportHistory.end(), DocumentViewport() );
+    d->m_undoStack = new QUndoStack(this);
     d->m_tiledObserver = 0;
 
     connect( PageController::self(), SIGNAL(rotationFinished(int,Okular::Page*)),
              this, SLOT(rotationFinished(int,Okular::Page*)) );
     connect( SettingsCore::self(), SIGNAL(configChanged()), this, SLOT(_o_configChanged()) );
+    connect( d->m_undoStack, SIGNAL( canUndoChanged(bool) ), this, SIGNAL( canUndoChanged(bool)));
+    connect( d->m_undoStack, SIGNAL( canRedoChanged(bool) ), this, SIGNAL( canRedoChanged(bool) ) );
 
     qRegisterMetaType<Okular::FontInfo>();
 }
@@ -1897,7 +2051,7 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
     QByteArray filedata;
     qint64 document_size = -1;
     bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
-    bool loadingMimeByContent = false;
+    bool triedMimeFromFileContent = false;
     if ( !isstdin )
     {
         if ( mime.count() <= 0 )
@@ -1915,23 +2069,23 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
         d->m_docFileName = docFile;
         if ( url.isLocalFile() && !d->m_archiveData )
         {
-        QString fn = url.fileName();
-        document_size = fileReadTest.size();
-        fn = QString::number( document_size ) + '.' + fn + ".xml";
-        QString newokular = "okular/docdata/" + fn;
-        QString newokularfile = KStandardDirs::locateLocal( "data", newokular );
-        if ( !QFile::exists( newokularfile ) )
-        {
-            QString oldkpdf = "kpdf/" + fn;
-            QString oldkpdffile = KStandardDirs::locateLocal( "data", oldkpdf );
-            if ( QFile::exists( oldkpdffile ) )
+            QString fn = url.fileName();
+            document_size = fileReadTest.size();
+            fn = QString::number( document_size ) + '.' + fn + ".xml";
+            QString newokular = "okular/docdata/" + fn;
+            QString newokularfile = KStandardDirs::locateLocal( "data", newokular );
+            if ( !QFile::exists( newokularfile ) )
             {
-                // ### copy or move?
-                if ( !QFile::copy( oldkpdffile, newokularfile ) )
-                    return false;
+                QString oldkpdf = "kpdf/" + fn;
+                QString oldkpdffile = KStandardDirs::locateLocal( "data", oldkpdf );
+                if ( QFile::exists( oldkpdffile ) )
+                {
+                    // ### copy or move?
+                    if ( !QFile::copy( oldkpdffile, newokularfile ) )
+                        return false;
+                }
             }
-        }
-        d->m_xmlFileName = newokularfile;
+            d->m_xmlFileName = newokularfile;
         }
     }
     else
@@ -1943,21 +2097,33 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
         if ( !mime || mime->name() == QLatin1String( "application/octet-stream" ) )
             return false;
         document_size = filedata.size();
-        loadingMimeByContent = true;
+        triedMimeFromFileContent = true;
     }
 
     // 0. load Generator
     // request only valid non-disabled plugins suitable for the mimetype
     QString constraint("([X-KDE-Priority] > 0) and (exist Library)") ;
     KService::List offers = KMimeTypeTrader::self()->query(mime->name(),"okular/Generator",constraint);
-    if ( offers.isEmpty() && !isstdin )
+    if ( offers.isEmpty() && !triedMimeFromFileContent )
     {
         KMimeType::Ptr newmime = KMimeType::findByFileContent( docFile );
-        loadingMimeByContent = true;
+        triedMimeFromFileContent = true;
         if ( newmime->name() != mime->name() )
         {
             mime = newmime;
             offers = KMimeTypeTrader::self()->query( mime->name(), "okular/Generator", constraint );
+        }
+        if ( offers.isEmpty() )
+        {
+            // There's still no offers, do a final mime search based on the filename
+            // We need this becuase sometimes (e.g. when downloading from a webserver) the mimetype we
+            // use is the one feeded by the server, that may be wrong
+            newmime = KMimeType::findByUrl( docFile );
+            if ( newmime->name() != mime->name() )
+            {
+                mime = newmime;
+                offers = KMimeTypeTrader::self()->query( mime->name(), "okular/Generator", constraint );
+            }
         }
     }
     if (offers.isEmpty())
@@ -1994,10 +2160,10 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
     KService::Ptr offer = offers.at( hRank );
     // 1. load Document
     bool openOk = d->openDocumentInternal( offer, isstdin, docFile, filedata );
-    if ( !openOk && !loadingMimeByContent )
+    if ( !openOk && !triedMimeFromFileContent )
     {
         KMimeType::Ptr newmime = KMimeType::findByFileContent( docFile );
-        loadingMimeByContent = true;
+        triedMimeFromFileContent = true;
         if ( newmime->name() != mime->name() )
         {
             mime = newmime;
@@ -2235,11 +2401,13 @@ void Document::closeDocument()
     d->m_allocatedTextPagesFifo.clear();
     d->m_pageSize = PageSize();
     d->m_pageSizes.clear();
-    
+
     delete d->m_documentInfo;
     d->m_documentInfo = 0;
 
     AudioPlayer::instance()->d->m_currentDocument = KUrl();
+
+    d->m_undoStack->clear();
 }
 
 void Document::addObserver( DocumentObserver * pObserver )
@@ -2366,9 +2534,9 @@ const DocumentInfo * Document::documentInfo() const
 
         const DocumentInfo::Key keyPages = DocumentInfo::Pages;
         const QString keyString = DocumentInfo::getKeyString( keyPages );
- 
+
         if ( info->get( keyString ).isEmpty() ) {
-            info->set( keyString, QString::number( this->pages() ), 
+            info->set( keyString, QString::number( this->pages() ),
                        DocumentInfo::getKeyTitle( keyPages ) );
         }
 
@@ -2732,35 +2900,12 @@ void DocumentPrivate::notifyAnnotationChanges( int page )
 
 void Document::addPageAnnotation( int page, Annotation * annotation )
 {
-    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( d->m_generator );
-    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
-
-    // find out the page to attach annotation
-    Page * kp = d->m_pagesVector[ page ];
-    if ( !d->m_generator || !kp )
-        return;
-
-    // the annotation belongs already to a page
-    if ( annotation->d_ptr->m_page )
-        return;
-
-    // add annotation to the page
-    kp->addAnnotation( annotation );
-
-    // tell the annotation proxy
-    if ( proxy && proxy->supports(AnnotationProxy::Addition) )
-        proxy->notifyAddition( annotation, page );
-
-    // notify observers about the change
-    d->notifyAnnotationChanges( page );
-
-    if ( annotation->flags() & Annotation::ExternallyDrawn )
-    {
-        // Redraw everything, including ExternallyDrawn annotations
-        d->refreshPixmaps( page );
-    }
-
-    d->warnLimitedAnnotSupport();
+    // Transform annotation's base boundary rectangle into unrotated coordinates
+    Page *p = d->m_pagesVector[page];
+    QTransform t = p->d->rotationMatrix();
+    annotation->d_ptr->baseTransform(t.inverted());
+    QUndoCommand *uc = new AddAnnotationCommand(this->d, annotation, page);
+    d->m_undoStack->push(uc);
 }
 
 bool Document::canModifyPageAnnotation( const Annotation * annotation ) const
@@ -2788,51 +2933,53 @@ bool Document::canModifyPageAnnotation( const Annotation * annotation ) const
     }
 }
 
-void Document::modifyPageAnnotation( int page, Annotation * annotation )
+void Document::prepareToModifyAnnotationProperties( Annotation * annotation )
 {
-    modifyPageAnnotation( page, annotation, true );
+    Q_ASSERT(d->m_prevPropsOfAnnotBeingModified.isNull());
+    if (!d->m_prevPropsOfAnnotBeingModified.isNull())
+    {
+        kError(OkularDebug) << "Error: Document::prepareToModifyAnnotationProperties has already been called since last call to Document::modifyPageAnnotationProperties";
+        return;
+    }
+    d->m_prevPropsOfAnnotBeingModified = annotation->getAnnotationPropertiesDomNode();
 }
 
-void Document::modifyPageAnnotation( int page, Annotation * annotation, bool appearanceChanged )
+void Document::modifyPageAnnotationProperties( int page, Annotation * annotation )
 {
-    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( d->m_generator );
-    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
-
-    // find out the page
-    Page * kp = d->m_pagesVector[ page ];
-    if ( !d->m_generator || !kp )
-        return;
-
-    // tell the annotation proxy
-    if ( proxy && proxy->supports(AnnotationProxy::Modification) )
-        proxy->notifyModification( annotation, page, appearanceChanged );
-
-    // notify observers about the change
-    d->notifyAnnotationChanges( page );
-
-    if ( appearanceChanged && (annotation->flags() & Annotation::ExternallyDrawn) )
+    Q_ASSERT(!d->m_prevPropsOfAnnotBeingModified.isNull());
+    if (d->m_prevPropsOfAnnotBeingModified.isNull())
     {
-        /* When an annotation is being moved, the generator will not render it.
-         * Therefore there's no need to refresh pixmaps after the first time */
-        if ( annotation->flags() & Annotation::BeingMoved )
-        {
-            if ( d->m_annotationBeingMoved )
-                return;
-            else // First time: take note
-                d->m_annotationBeingMoved = true;
-        }
-        else
-        {
-            d->m_annotationBeingMoved = false;
-        }
-
-        // Redraw everything, including ExternallyDrawn annotations
-        d->refreshPixmaps( page );
+        kError(OkularDebug) << "Error: Document::prepareToModifyAnnotationProperties must be called before Annotation is modified";
+        return;
     }
+    QDomNode prevProps = d->m_prevPropsOfAnnotBeingModified;
+    QUndoCommand *uc = new Okular::ModifyAnnotationPropertiesCommand( d,
+                                                                      annotation,
+                                                                      page,
+                                                                      prevProps,
+                                                                      annotation->getAnnotationPropertiesDomNode() );
+    d->m_undoStack->push( uc );
+    d->m_prevPropsOfAnnotBeingModified.clear();
+}
 
-    // If the user is moving the annotation, don't steal the focus
-    if ( (annotation->flags() & Annotation::BeingMoved) == 0 )
-        d->warnLimitedAnnotSupport();
+void Document::translatePageAnnotation(int page, Annotation* annotation, const NormalizedPoint & delta )
+{
+    int complete = (annotation->flags() & Okular::Annotation::BeingMoved) == 0;
+    QUndoCommand *uc = new Okular::TranslateAnnotationCommand( d, annotation, page, delta, complete );
+    d->m_undoStack->push(uc);
+}
+
+void Document::editPageAnnotationContents( int page, Annotation* annotation,
+                                           const QString & newContents,
+                                           int newCursorPos,
+                                           int prevCursorPos,
+                                           int prevAnchorPos
+                                         )
+{
+    QString prevContents = annotation->contents();
+    QUndoCommand *uc = new EditAnnotationContentsCommand( d, annotation, page, newContents, newCursorPos,
+                                                            prevContents, prevCursorPos, prevAnchorPos );
+    d->m_undoStack->push( uc );
 }
 
 bool Document::canRemovePageAnnotation( const Annotation * annotation ) const
@@ -2859,88 +3006,19 @@ bool Document::canRemovePageAnnotation( const Annotation * annotation ) const
 
 void Document::removePageAnnotation( int page, Annotation * annotation )
 {
-    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( d->m_generator );
-    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
-    bool isExternallyDrawn;
-
-    // find out the page
-    Page * kp = d->m_pagesVector[ page ];
-    if ( !d->m_generator || !kp )
-        return;
-
-    if ( annotation->flags() & Annotation::ExternallyDrawn )
-        isExternallyDrawn = true;
-    else
-        isExternallyDrawn = false;
-
-    // try to remove the annotation
-    if ( canRemovePageAnnotation( annotation ) )
-    {
-        // tell the annotation proxy
-        if ( proxy && proxy->supports(AnnotationProxy::Removal) )
-            proxy->notifyRemoval( annotation, page );
-
-        kp->removeAnnotation( annotation ); // Also destroys the object
-
-        // in case of success, notify observers about the change
-        d->notifyAnnotationChanges( page );
-
-        if ( isExternallyDrawn )
-        {
-            // Redraw everything, including ExternallyDrawn annotations
-            d->refreshPixmaps( page );
-        }
-    }
-
-    d->warnLimitedAnnotSupport();
+    QUndoCommand *uc = new RemoveAnnotationCommand(this->d, annotation, page);
+    d->m_undoStack->push(uc);
 }
 
-void Document::removePageAnnotations( int page, const QList< Annotation * > &annotations )
+void Document::removePageAnnotations( int page, const QList<Annotation*> &annotations )
 {
-    Okular::SaveInterface * iface = qobject_cast< Okular::SaveInterface * >( d->m_generator );
-    AnnotationProxy *proxy = iface ? iface->annotationProxy() : 0;
-    bool refreshNeeded = false;
-
-    // find out the page
-    Page * kp = d->m_pagesVector[ page ];
-    if ( !d->m_generator || !kp )
-        return;
-
-    bool changed = false;
-    foreach ( Annotation * annotation, annotations )
+    d->m_undoStack->beginMacro(i18nc("remove a collection of annotations from the page", "remove annotations"));
+    foreach(Annotation* annotation, annotations)
     {
-        bool isExternallyDrawn;
-        if ( annotation->flags() & Annotation::ExternallyDrawn )
-            isExternallyDrawn = true;
-        else
-            isExternallyDrawn = false;
-
-        if ( canRemovePageAnnotation( annotation ) )
-        {
-            if ( isExternallyDrawn )
-                refreshNeeded = true;
-
-            // tell the annotation proxy
-            if ( proxy && proxy->supports(AnnotationProxy::Removal) )
-                proxy->notifyRemoval( annotation, page );
-
-            kp->removeAnnotation( annotation ); // Also destroys the object
-            changed = true;
-        }
+        QUndoCommand *uc = new RemoveAnnotationCommand(this->d, annotation, page);
+        d->m_undoStack->push(uc);
     }
-    if ( changed )
-    {
-        // in case we removed even only one annotation, notify observers about the change
-        d->notifyAnnotationChanges( page );
-
-        if ( refreshNeeded )
-        {
-            // Redraw everything, including ExternallyDrawn annotations
-            d->refreshPixmaps( page );
-        }
-    }
-
-    d->warnLimitedAnnotSupport();
+    d->m_undoStack->endMacro();
 }
 
 bool DocumentPrivate::canAddAnnotationsNatively() const
@@ -2990,6 +3068,16 @@ void Document::setPageTextSelection( int page, RegularAreaRect * rect, const QCo
 
     // notify observers about the change
     foreachObserver( notifyPageChanged( page, DocumentObserver::TextSelection ) );
+}
+
+bool Document::canUndo() const
+{
+    return d->m_undoStack->canUndo();
+}
+
+bool Document::canRedo() const
+{
+    return d->m_undoStack->canRedo();
 }
 
 /* REFERENCE IMPLEMENTATION: better calling setViewport from other code
@@ -3215,7 +3303,7 @@ void Document::searchText( int searchID, const QString & text, bool fromStart, Q
                 pagesDone++;
             }
         }
-        
+
         DoContinueDirectionMatchSearchStruct *searchStruct = new DoContinueDirectionMatchSearchStruct();
         searchStruct->forward = forward;
         searchStruct->pagesToNotify = pagesToNotify;
@@ -3308,6 +3396,16 @@ void Document::resetSearch( int searchID )
 void Document::cancelSearch()
 {
     d->m_searchCancelled = true;
+}
+
+void Document::undo()
+{
+    d->m_undoStack->undo();
+}
+
+void Document::redo()
+{
+    d->m_undoStack->redo();
 }
 
 BookmarkManager * Document::bookmarkManager() const
@@ -3714,7 +3812,7 @@ QString Document::printError() const
         case Generator::UnknownPrintError:
             return QString();
     }
-    
+
     return QString();
 }
 
@@ -3892,12 +3990,12 @@ void Document::unregisterView( View *view )
 QByteArray Document::fontData(const FontInfo &font) const
 {
     QByteArray result;
-    
+
     if (d->m_generator)
     {
         QMetaObject::invokeMethod(d->m_generator, "requestFontData", Qt::DirectConnection, Q_ARG(Okular::FontInfo, font), Q_ARG(QByteArray *, &result));
     }
-    
+
     return result;
 }
 

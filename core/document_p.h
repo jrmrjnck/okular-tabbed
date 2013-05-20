@@ -27,6 +27,7 @@
 #include "fontinfo.h"
 #include "generator.h"
 
+class QUndoStack;
 class QEventLoop;
 class QTimer;
 class KTemporaryFile;
@@ -140,6 +141,12 @@ class DocumentPrivate
         bool canModifyExternalAnnotations() const;
         bool canRemoveExternalAnnotations() const;
         void warnLimitedAnnotSupport();
+
+        // Methods that implement functionality needed by undo commands
+        void performAddPageAnnotation( int page, Annotation *annotation );
+        void performRemovePageAnnotation( int page, Annotation * annotation );
+        void performModifyPageAnnotation( int page, Annotation * annotation, bool appearanceChanged );
+        void performSetAnnotationContents( const QString & newContents, Annotation *annot, int pageNumber );
 
         // private slots
         void saveDocumentInfo() const;
@@ -261,6 +268,9 @@ class DocumentPrivate
         bool m_annotationsNeedSaveAs;
         bool m_annotationBeingMoved; // is an annotation currently being moved?
         bool m_showWarningLimitedAnnotSupport;
+
+        QUndoStack *m_undoStack;
+        QDomNode m_prevPropsOfAnnotBeingModified;
 };
 
 }
