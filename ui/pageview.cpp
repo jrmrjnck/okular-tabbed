@@ -223,11 +223,11 @@ FormWidgetsController* PageViewPrivate::formWidgetsController()
 {
     if ( !formsWidgetController )
     {
-        formsWidgetController = new FormWidgetsController();
-        QObject::connect( formsWidgetController, SIGNAL(changed(FormWidgetIface*)),
-                          q, SLOT(slotFormWidgetChanged(FormWidgetIface*)) );
-        QObject::connect( formsWidgetController, SIGNAL(action(Okular::Action*)),
-                          q, SLOT(slotAction(Okular::Action*)) );
+        formsWidgetController = new FormWidgetsController( document );
+        QObject::connect( formsWidgetController, SIGNAL( changed( int ) ),
+                          q, SLOT( slotFormChanged( int ) ) );
+        QObject::connect( formsWidgetController, SIGNAL( action( Okular::Action* ) ),
+                          q, SLOT( slotAction( Okular::Action* ) ) );
     }
 
     return formsWidgetController;
@@ -739,11 +739,24 @@ void PageView::reparseConfig()
 
     updatePageStep();
 
+    if ( d->annotator )
+    {
+        d->annotator->setEnabled( false );
+        d->annotator->reparseConfig();
+        if ( d->aToggleAnnotator->isChecked() )
+            slotToggleAnnotator( true );
+    }
+
     // Something like invert colors may have changed
     // As we don't have a way to find out the old value
     // We just update the viewport, this shouldn't be that bad
     // since it's just a repaint of pixmaps we already have
     viewport()->update();
+}
+
+KActionCollection *PageView::actionCollection() const
+{
+    return d->actionCollection;
 }
 
 KAction *PageView::toggleFormsAction() const
@@ -4629,17 +4642,22 @@ void PageView::slotToggleForms()
     toggleFormWidgets( !d->m_formsVisible );
 }
 
-void PageView::slotFormWidgetChanged( FormWidgetIface *w )
+void PageView::slotFormChanged( int pageNumber )
 {
     if ( !d->refreshTimer )
     {
         d->refreshTimer = new QTimer( this );
         d->refreshTimer->setSingleShot( true );
-        connect( d->refreshTimer, SIGNAL(timeout()),
-                 this, SLOT(slotRefreshPage()) );
+        connect( d->refreshTimer, SIGNAL( timeout() ),
+                 this, SLOT( slotRefreshPage() ) );
     }
-    d->refreshPage = w->pageItem()->pageNumber();
-    d->refreshTimer->start( 1000 );
+    d->refreshPage = pageNumber;
+    int delay = 0;
+    if ( d->m_formsVisible )
+    {
+        delay = 1000;
+    }
+    d->refreshTimer->start( delay );
 }
 
 void PageView::slotRefreshPage()

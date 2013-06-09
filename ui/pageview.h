@@ -95,6 +95,7 @@ Q_OBJECT
 
         void reparseConfig();
 
+        KActionCollection *actionCollection() const;
         KAction *toggleFormsAction() const;
 
         int contentAreaWidth() const;
@@ -247,7 +248,7 @@ Q_OBJECT
         void slotPageSizes( int );
         void slotTrimMarginsToggled( bool );
         void slotToggleForms();
-        void slotFormWidgetChanged( FormWidgetIface *w );
+        void slotFormChanged( int pageNumber );
         void slotRefreshPage();
         void slotSpeakDocument();
         void slotSpeakCurrentPage();

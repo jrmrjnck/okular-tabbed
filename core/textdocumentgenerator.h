@@ -185,24 +185,10 @@ class OKULAR_EXPORT TextDocumentGenerator : public Generator, public Okular::Con
         void addPages( KConfigDialog* dlg );
 
         /**
-         * General settings
-         *
-         * This method return TextDocumentSettingsWidget
-         * that contain default settings for text based documents.
-         *
-         * @see generalSettings()
-         *
-         * @since 0.17 (KDE 4.11)
-         */
-        TextDocumentSettingsWidget* generalSettingsWidget();
-
-        /**
          * Config skeleton for TextDocumentSettingsWidget
          *
          * You must use new construtor to initialize TextDocumentSettings,
          * that contain @param configName.
-         *
-         * @see generalSettingsWidget()
          *
          * @since 0.17 (KDE 4.11)
          */
@@ -224,7 +210,6 @@ class OKULAR_EXPORT TextDocumentGenerator : public Generator, public Okular::Con
         Q_PRIVATE_SLOT( d_func(), void addTitle( int, const QString&, const QTextBlock& ) )
         Q_PRIVATE_SLOT( d_func(), void addMetaData( const QString&, const QString&, const QString& ) )
         Q_PRIVATE_SLOT( d_func(), void addMetaData( DocumentInfo::Key, const QString& ) )
-        Q_PRIVATE_SLOT( d_func(), void generalSettingsWidgetDestroyed() )
 };
 
 }

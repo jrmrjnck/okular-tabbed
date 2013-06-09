@@ -185,36 +185,47 @@ static QAction* actionForExportFormat( const Okular::ExportFormat& format, QObje
 
 static QString compressedMimeFor( const QString& mime_to_check )
 {
+    // The compressedMimeMap is here in case you have a very old shared mime database
+    // that doesn't have inheritance info for things like gzeps, etc
+    // Otherwise the "is()" calls below are just good enough
     static QHash< QString, QString > compressedMimeMap;
+    static bool supportBzip = false;
+    static bool supportXz = false;
+    const QString app_gzip( QString::fromLatin1( "application/x-gzip" ) );
+    const QString app_bzip( QString::fromLatin1( "application/x-bzip" ) );
+    const QString app_xz( QString::fromLatin1( "application/x-xz" ) );
     if ( compressedMimeMap.isEmpty() )
     {
         std::auto_ptr< KFilterBase > f;
-        compressedMimeMap[ QString::fromLatin1( "application/x-gzip" ) ] =
-            QString::fromLatin1( "application/x-gzip" );
-        compressedMimeMap[ QString::fromLatin1( "image/x-gzeps" ) ] =
-            QString::fromLatin1( "application/x-gzip" );
+        compressedMimeMap[ QString::fromLatin1( "image/x-gzeps" ) ] = app_gzip;
         // check we can read bzip2-compressed files
-        f.reset( KFilterBase::findFilterByMimeType( QString::fromLatin1( "application/x-bzip" ) ) );
+        f.reset( KFilterBase::findFilterByMimeType( app_bzip ) );
         if ( f.get() )
         {
-            const QString app_bzip( QString::fromLatin1( "application/x-bzip" ) );
-            compressedMimeMap[ app_bzip ] = app_bzip;
+            supportBzip = true;
             compressedMimeMap[ QString::fromLatin1( "application/x-bzpdf" ) ] = app_bzip;
             compressedMimeMap[ QString::fromLatin1( "application/x-bzpostscript" ) ] = app_bzip;
             compressedMimeMap[ QString::fromLatin1( "application/x-bzdvi" ) ] = app_bzip;
             compressedMimeMap[ QString::fromLatin1( "image/x-bzeps" ) ] = app_bzip;
         }
         // check we can read XZ-compressed files
-        f.reset( KFilterBase::findFilterByMimeType( QString::fromLatin1( "application/x-xz" ) ) );
+        f.reset( KFilterBase::findFilterByMimeType( app_xz ) );
         if ( f.get() )
         {
-            const QString app_xz( QString::fromLatin1( "application/x-xz" ) );
-            compressedMimeMap[ app_xz ] = app_xz;
+            supportXz = true;
         }
     }
     QHash< QString, QString >::const_iterator it = compressedMimeMap.constFind( mime_to_check );
     if ( it != compressedMimeMap.constEnd() )
         return it.value();
+
+    KMimeType::Ptr mime = KMimeType::mimeType( mime_to_check );
+    if ( mime->is( app_gzip ) )
+        return app_gzip;
+    else if ( supportBzip && mime->is( app_bzip ) )
+        return app_bzip;
+    else if ( supportXz && mime->is( app_xz ) )
+        return app_xz;
 
     return QString();
 }
@@ -495,6 +506,9 @@ Part::Part(QWidget *parentWidget,
     connect( m_dirtyHandler, SIGNAL(timeout()),this, SLOT(slotDoFileDirty()) );
 
     slotNewConfig();
+
+    // keep us informed when the user changes settings
+    connect( Okular::Settings::self(), SIGNAL(configChanged()), this, SLOT(slotNewConfig()) );
 
     // [SPEECH] check for KTTSD presence and usability
     const KService::Ptr kttsd = KService::serviceByDesktopName("kttsd");
@@ -808,6 +822,11 @@ void Part::setupActions()
     ac->addAction( "presentation_erase_drawings", eraseDrawingAction );
     eraseDrawingAction->setIcon( KIcon( "draw-eraser" ) );
     eraseDrawingAction->setEnabled( false );
+
+    KAction *configureAnnotations = new KAction( i18n( "Configure Annotations..." ), ac );
+    ac->addAction( "options_configure_annotations", configureAnnotations );
+    configureAnnotations->setIcon( KIcon( "configure" ) );
+    connect(configureAnnotations, SIGNAL(triggered()), this, SLOT(slotAnnotationPreferences()));
 }
 
 Part::~Part()
@@ -1021,15 +1040,12 @@ void Part::setWindowTitleFromDocument()
     emit setWindowCaption( title );
 }
 
-void Part::slotGeneratorPreferences( )
+KConfigDialog * Part::slotGeneratorPreferences( )
 {
-    // an instance the dialog could be already created and could be cached,
-    // in which case you want to display the cached dialog
-    if ( KConfigDialog::showDialog( "generator_prefs" ) )
-        return;
-
-    // we didn't find an instance of this dialog, so lets create it
+    // Create dialog
     KConfigDialog * dialog = new KConfigDialog( m_pageView, "generator_prefs", Okular::Settings::self() );
+    dialog->setAttribute( Qt::WA_DeleteOnClose );
+
     if( m_embedMode == ViewerWidgetMode )
     {
         dialog->setCaption( i18n( "Configure Viewer Backends" ) );
@@ -1041,9 +1057,11 @@ void Part::slotGeneratorPreferences( )
 
     m_document->fillConfigDialog( dialog );
 
-    // keep us informed when the user changes settings
-    connect( dialog, SIGNAL(settingsChanged(QString)), this, SLOT(slotNewGeneratorConfig()) );
+    // Show it
+    dialog->setWindowModality( Qt::ApplicationModal );
     dialog->show();
+
+    return dialog;
 }
 
 
@@ -1597,6 +1615,8 @@ void Part::slotDoFileDirty()
     // close and (try to) reopen the document
     if ( !closeUrl() )
     {
+        m_viewportDirty.pageNumber = -1;
+
         if ( tocReloadPrepared ) 
         {
             m_toc->rollbackReload();
@@ -2159,16 +2179,23 @@ void Part::slotGetNewStuff()
 
 void Part::slotPreferences()
 {
-    // an instance the dialog could be already created and could be cached,
-    // in which case you want to display the cached dialog
-    if ( PreferencesDialog::showDialog( "preferences" ) )
-        return;
-
-    // we didn't find an instance of this dialog, so lets create it
+    // Create dialog
     PreferencesDialog * dialog = new PreferencesDialog( m_pageView, Okular::Settings::self(), m_embedMode );
-    // keep us informed when the user changes settings
-    connect( dialog, SIGNAL(settingsChanged(QString)), this, SLOT(slotNewConfig()) );
+    dialog->setAttribute( Qt::WA_DeleteOnClose );
 
+    // Show it
+    dialog->show();
+}
+
+
+void Part::slotAnnotationPreferences()
+{
+    // Create dialog
+    PreferencesDialog * dialog = new PreferencesDialog( m_pageView, Okular::Settings::self(), m_embedMode );
+    dialog->setAttribute( Qt::WA_DeleteOnClose );
+
+    // Show it
+    dialog->switchToAnnotationsPage();
     dialog->show();
 }
 
@@ -2200,31 +2227,6 @@ void Part::slotNewConfig()
         m_reviewsWidget->reparseConfig();
 
     setWindowTitleFromDocument ();
-}
-
-
-void Part::slotNewGeneratorConfig()
-{
-    // Apply settings here. A good policy is to check whether the setting has
-    // changed before applying changes.
-
-    // NOTE: it's not needed to reload the configuration of the Document,
-    // the Document itself will take care of that
-
-    // Main View (pageView)
-    m_pageView->reparseConfig();
-
-    // update TOC settings
-    if ( m_sidebar->isItemEnabled(0) )
-        m_toc->reparseConfig();
-
-    // update ThumbnailList contents
-    if ( Okular::Settings::showLeftPanel() && !m_thumbnailList->isHidden() )
-        m_thumbnailList->updateWidgets();
-
-    // update Reviews settings
-    if ( m_sidebar->isItemEnabled(2) )
-        m_reviewsWidget->reparseConfig();
 }
 
 

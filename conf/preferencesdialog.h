@@ -21,7 +21,7 @@ class DlgGeneral;
 class DlgPerformance;
 class DlgAccessibility;
 class DlgPresentation;
-class DlgIdentity;
+class DlgAnnotations;
 class DlgEditor;
 class DlgDebug;
 
@@ -30,6 +30,8 @@ class PreferencesDialog : public KConfigDialog
 
     public:
         PreferencesDialog( QWidget * parent, KConfigSkeleton * config, Okular::EmbedMode embedMode );
+
+        void switchToAnnotationsPage();
 
     protected:
 //      void updateSettings(); // Called when OK/Apply is pressed.
@@ -43,9 +45,11 @@ class PreferencesDialog : public KConfigDialog
         DlgPerformance * m_performance;
         DlgAccessibility * m_accessibility;
         DlgPresentation * m_presentation;
-        DlgIdentity * m_identity;
+        DlgAnnotations * m_annotations;
         DlgEditor * m_editor;
         DlgDebug * m_debug;
+
+        KPageWidgetItem * m_annotationsPage;
 };
 
 #endif
