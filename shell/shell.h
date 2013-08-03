@@ -150,9 +150,9 @@ private:
   struct TabState
   {
     TabState( KParts::ReadWritePart* p )
-      : part(p), 
-        printEnabled(false), 
-        closeEnabled(false) 
+      : part(p),
+        printEnabled(false),
+        closeEnabled(false)
     {}
     KParts::ReadWritePart* part;
     bool printEnabled;

@@ -284,20 +284,12 @@ namespace Okular
 {
 
 Part::Part(QWidget *parentWidget,
-           QObject *parent,
-           const QVariantList &args,
-           KComponentData componentData )
- : KParts::ReadWritePart(parent),
-   m_tempfile( 0 ), 
-   m_fileWasRemoved( false ), 
-   m_showMenuBarAction( 0 ), 
-   m_showFullScreenAction( 0 ), 
-   m_actionsSearched( false ),
-   m_cliPresentation(false), 
-   m_cliPrint(false), 
-   m_embedMode(detectEmbedMode(parentWidget, parent, args)), 
-   m_generatorGuiClient(0), 
-   m_keeper( 0 )
+QObject *parent,
+const QVariantList &args,
+KComponentData componentData )
+: KParts::ReadWritePart(parent),
+m_tempfile( 0 ), m_fileWasRemoved( false ), m_showMenuBarAction( 0 ), m_showFullScreenAction( 0 ), m_actionsSearched( false ),
+m_cliPresentation(false), m_cliPrint(false), m_embedMode(detectEmbedMode(parentWidget, parent, args)), m_generatorGuiClient(0), m_keeper( 0 )
 {
     // first, we check if a config file name has been specified
     QString configFileName = detectConfigFileName( args );
