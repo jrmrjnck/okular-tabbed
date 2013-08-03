@@ -223,11 +223,11 @@ FormWidgetsController* PageViewPrivate::formWidgetsController()
 {
     if ( !formsWidgetController )
     {
-        formsWidgetController = new FormWidgetsController();
-        QObject::connect( formsWidgetController, SIGNAL(changed(FormWidgetIface*)),
-                          q, SLOT(slotFormWidgetChanged(FormWidgetIface*)) );
-        QObject::connect( formsWidgetController, SIGNAL(action(Okular::Action*)),
-                          q, SLOT(slotAction(Okular::Action*)) );
+        formsWidgetController = new FormWidgetsController( document );
+        QObject::connect( formsWidgetController, SIGNAL( changed( int ) ),
+                          q, SLOT( slotFormChanged( int ) ) );
+        QObject::connect( formsWidgetController, SIGNAL( action( Okular::Action* ) ),
+                          q, SLOT( slotAction( Okular::Action* ) ) );
     }
 
     return formsWidgetController;
@@ -739,11 +739,24 @@ void PageView::reparseConfig()
 
     updatePageStep();
 
+    if ( d->annotator )
+    {
+        d->annotator->setEnabled( false );
+        d->annotator->reparseConfig();
+        if ( d->aToggleAnnotator->isChecked() )
+            slotToggleAnnotator( true );
+    }
+
     // Something like invert colors may have changed
     // As we don't have a way to find out the old value
     // We just update the viewport, this shouldn't be that bad
     // since it's just a repaint of pixmaps we already have
     viewport()->update();
+}
+
+KActionCollection *PageView::actionCollection() const
+{
+    return d->actionCollection;
 }
 
 KAction *PageView::toggleFormsAction() const
@@ -919,7 +932,7 @@ void PageView::notifySetup( const QVector< Okular::Page * > & pageSet, int setup
     {
         // update the mouse cursor when closing because we may have close through a link and
         // want the cursor to come back to the normal cursor
-        updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+        updateCursor();
         // then, make the message window and scrollbars disappear, and trigger a repaint
         d->messageWindow->hide();
         resizeContentArea( QSize( 0,0 ) );
@@ -1163,7 +1176,7 @@ void PageView::slotRealNotifyViewportChanged( bool smoothMove )
     }
 
     // since the page has moved below cursor, update it
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
 }
 
 void PageView::notifyPageChanged( int pageNumber, int changedFlags )
@@ -1190,7 +1203,7 @@ void PageView::notifyPageChanged( int pageNumber, int changedFlags )
                 AnnotWindow *w = *it;
                 it = d->m_annowindows.erase( it );
                 // Need to delete after removing from the list
-                // otherwise deleting will call slotAnnotationWindowDestroyed wich will mess
+                // otherwise deleting will call slotAnnotationWindowDestroyed which will mess
                 // the list and the iterators
                 delete w;
             }
@@ -1227,7 +1240,7 @@ void PageView::notifyPageChanged( int pageNumber, int changedFlags )
             if ( cursor().shape() != Qt::SizeVerCursor )
             {
                 // since the page has been regenerated below cursor, update it
-                updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+                updateCursor();
             }
             break;
         }
@@ -1705,7 +1718,7 @@ void PageView::keyReleaseEvent( QKeyEvent * e )
 {
     e->accept();
 
-    if ( d->annotator && d->annotator->routeEvents() )
+    if ( d->annotator && d->annotator->active() )
     {
         if ( d->annotator->routeKeyEvent( e ) )
             return;
@@ -1771,7 +1784,7 @@ void PageView::tabletEvent( QTabletEvent * e )
 
     // If we're editing an annotation and the tablet pen is either down or just released
     // then dispatch event to annotator
-    if ( d->annotator && d->annotator->routeEvents() && ( d->penDown || penReleased ) )
+    if ( d->annotator && d->annotator->active() && ( d->penDown || penReleased ) )
     {
         const QPoint eventPos = contentAreaPoint( e->pos() );
         PageViewItem * pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() );
@@ -1838,9 +1851,10 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
     const QPoint eventPos = contentAreaPoint( e->pos() );
 
     // if we're editing an annotation, dispatch event to it
-    if ( d->annotator && d->annotator->routeEvents() )
+    if ( d->annotator && d->annotator->active() )
     {
         PageViewItem * pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() );
+        updateCursor( eventPos );
         d->annotator->routeMouseEvent( e, pageItem );
         return;
     }
@@ -1936,7 +1950,7 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
             else
             {
                 // only hovering the page, so update the cursor
-                updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+                updateCursor();
             }
             break;
 
@@ -1954,7 +1968,7 @@ void PageView::mouseMoveEvent( QMouseEvent * e )
                 d->mouseTextSelecting = true;
             }
             updateSelection( eventPos );
-            updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+            updateCursor();
             break;
     }
 }
@@ -1988,7 +2002,7 @@ void PageView::mousePressEvent( QMouseEvent * e )
     const QPoint eventPos = contentAreaPoint( e->pos() );
 
     // if we're editing an annotation, dispatch event to it
-    if ( d->annotator && d->annotator->routeEvents() )
+    if ( d->annotator && d->annotator->active() )
     {
         PageViewItem * pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() );
         d->annotator->routeMouseEvent( e, pageItem );
@@ -2220,7 +2234,7 @@ void PageView::mouseReleaseEvent( QMouseEvent * e )
     }
 
     // if we're editing an annotation, dispatch event to it
-    if ( d->annotator && d->annotator->routeEvents() )
+    if ( d->annotator && d->annotator->active() )
     {
         PageViewItem * pageItem = pickItemOnPoint( eventPos.x(), eventPos.y() );
         d->annotator->routeMouseEvent( e, pageItem );
@@ -2999,7 +3013,7 @@ void PageView::wheelEvent( QWheelEvent *e )
     else
         QAbstractScrollArea::wheelEvent( e );
 
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
 }
 
 void PageView::dragEnterEvent( QDragEnterEvent * ev )
@@ -3629,11 +3643,25 @@ void PageView::updateZoomText()
     d->aZoom->selectableActionGroup()->setEnabled( d->items.size() > 0 );
 }
 
+void PageView::updateCursor()
+{
+    const QPoint p = contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() );
+    updateCursor( p );
+}
+
 void PageView::updateCursor( const QPoint &p )
 {
     // detect the underlaying page (if present)
     PageViewItem * pageItem = pickItemOnPoint( p.x(), p.y() );
-    if ( pageItem )
+
+    if ( d->annotator && d->annotator->active() )
+    {
+        if ( pageItem || d->annotator->annotating() )
+            setCursor( d->annotator->cursor() );
+        else
+            setCursor( Qt::ForbiddenCursor );
+    }
+    else if ( pageItem )
     {
         double nX = pageItem->absToPageX(p.x());
         double nY = pageItem->absToPageY(p.y());
@@ -3645,7 +3673,7 @@ void PageView::updateCursor( const QPoint &p )
             setCursor( Qt::CrossCursor );
         else if ( d->mouseAnn )
             setCursor( Qt::ClosedHandCursor );
-        else
+        else if ( Okular::Settings::mouseMode() == Okular::Settings::EnumMouseMode::Browse )
         {
             const Okular::ObjectRect * linkobj = pageItem->page()->objectRect( Okular::ObjectRect::Action, nX, nY, pageItem->uncroppedWidth(), pageItem->uncroppedHeight() );
             const Okular::ObjectRect * annotobj = pageItem->page()->objectRect( Okular::ObjectRect::OAnnotation, nX, nY, pageItem->uncroppedWidth(), pageItem->uncroppedHeight() );
@@ -3678,16 +3706,20 @@ void PageView::updateCursor( const QPoint &p )
                             setCursor( Qt::PointingHandCursor );
                         }
                     }
-                }
-                else if ( Okular::Settings::mouseMode() == Okular::Settings::EnumMouseMode::Browse )
-                {
-                    setCursor( Qt::OpenHandCursor );
+                    else
+                    {
+                        setCursor( Qt::OpenHandCursor );
+                    }
                 }
                 else
                 {
-                    setCursor( Qt::ArrowCursor );
+                    setCursor( Qt::OpenHandCursor );
                 }
             }
+        }
+        else
+        {
+            setCursor( Qt::ArrowCursor );
         }
     }
     else
@@ -4395,7 +4427,7 @@ void PageView::slotSetMouseNormal()
     if ( d->annotator && d->annotator->hidingWasForced() && d->aToggleAnnotator && !d->aToggleAnnotator->isChecked() )
         d->aToggleAnnotator->trigger();
     // force an update of the cursor
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
     Okular::Settings::self()->writeConfig();
 }
 
@@ -4411,7 +4443,7 @@ void PageView::slotSetMouseZoom()
         d->annotator->setHidingForced( true );
     }
     // force an update of the cursor
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
     Okular::Settings::self()->writeConfig();
 }
 
@@ -4427,7 +4459,7 @@ void PageView::slotSetMouseSelect()
         d->annotator->setHidingForced( true );
     }
     // force an update of the cursor
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
     Okular::Settings::self()->writeConfig();
 }
 
@@ -4443,7 +4475,7 @@ void PageView::slotSetMouseTextSelect()
         d->annotator->setHidingForced( true );
     }
     // force an update of the cursor
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
     Okular::Settings::self()->writeConfig();
 }
 
@@ -4461,7 +4493,7 @@ void PageView::slotSetMouseTableSelect()
         d->annotator->setHidingForced( true );
     }
     // force an update of the cursor
-    updateCursor( contentAreaPosition() + viewport()->mapFromGlobal( QCursor::pos() ) );
+    updateCursor();
     Okular::Settings::self()->writeConfig();
 }
 
@@ -4629,17 +4661,22 @@ void PageView::slotToggleForms()
     toggleFormWidgets( !d->m_formsVisible );
 }
 
-void PageView::slotFormWidgetChanged( FormWidgetIface *w )
+void PageView::slotFormChanged( int pageNumber )
 {
     if ( !d->refreshTimer )
     {
         d->refreshTimer = new QTimer( this );
         d->refreshTimer->setSingleShot( true );
-        connect( d->refreshTimer, SIGNAL(timeout()),
-                 this, SLOT(slotRefreshPage()) );
+        connect( d->refreshTimer, SIGNAL( timeout() ),
+                 this, SLOT( slotRefreshPage() ) );
     }
-    d->refreshPage = w->pageItem()->pageNumber();
-    d->refreshTimer->start( 1000 );
+    d->refreshPage = pageNumber;
+    int delay = 0;
+    if ( d->m_formsVisible )
+    {
+        delay = 1000;
+    }
+    d->refreshTimer->start( delay );
 }
 
 void PageView::slotRefreshPage()

@@ -95,6 +95,7 @@ Q_OBJECT
 
         void reparseConfig();
 
+        KActionCollection *actionCollection() const;
         KAction *toggleFormsAction() const;
 
         int contentAreaWidth() const;
@@ -108,6 +109,9 @@ Q_OBJECT
 
         void setLastSourceLocationViewport( const Okular::DocumentViewport& vp );
         void clearLastSourceLocationViewport();
+
+        void updateCursor();
+
     public slots:
         void errorMessage( const QString & message, int duration = -1 )
         {
@@ -247,7 +251,7 @@ Q_OBJECT
         void slotPageSizes( int );
         void slotTrimMarginsToggled( bool );
         void slotToggleForms();
-        void slotFormWidgetChanged( FormWidgetIface *w );
+        void slotFormChanged( int pageNumber );
         void slotRefreshPage();
         void slotSpeakDocument();
         void slotSpeakCurrentPage();

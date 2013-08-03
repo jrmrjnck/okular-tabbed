@@ -24,6 +24,7 @@ class QAction;
 class QLabel;
 class QTimer;
 class FormWidgetIface;
+class PageView;
 class VideoWidget;
 
 namespace Okular {
@@ -153,7 +154,7 @@ struct AnnotationToolItem
 
     int id;
     QString text;
-    QString pixmap;
+    QPixmap pixmap;
     QString shortcut;
     bool isText;
 };
@@ -192,7 +193,7 @@ class PageViewToolBar : public QWidget
 {
     Q_OBJECT
     public:
-        PageViewToolBar( QWidget * parent, QWidget * anchorWidget );
+        PageViewToolBar( PageView * parent, QWidget * anchorWidget );
         ~PageViewToolBar();
 
         // animated widget controls

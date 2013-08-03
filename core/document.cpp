@@ -83,6 +83,7 @@
 #include "utils_p.h"
 #include "view.h"
 #include "view_p.h"
+#include "form.h"
 
 #include <memory>
 
@@ -1311,8 +1312,15 @@ void DocumentPrivate::sendGeneratorPixmapRequest()
         QRect requestRect = r->isTile() ? r->normalizedRect().geometry( r->width(), r->height() ) : QRect( 0, 0, r->width(), r->height() );
         TilesManager *tilesManager = ( r->observer() == m_tiledObserver ) ? r->page()->d->tilesManager() : 0;
 
+        // If it's a preload but the generator is not threaded no point in trying to preload
+        if ( r->preload() && !m_generator->hasFeature( Generator::Threaded ) )
+        {
+            m_pixmapRequestsStack.pop_back();
+            delete r;
+        }
         // request only if page isn't already present and request has valid id
-        if ( ( !r->d->mForce && r->page()->hasPixmap( r->observer(), r->width(), r->height(), r->normalizedRect() ) ) || !m_observers.contains(r->observer()) )
+        // request only if page isn't already present and request has valid id
+        else if ( ( !r->d->mForce && r->page()->hasPixmap( r->observer(), r->width(), r->height(), r->normalizedRect() ) ) || !m_observers.contains(r->observer()) )
         {
             m_pixmapRequestsStack.pop_back();
             delete r;
@@ -1572,23 +1580,18 @@ void DocumentPrivate::refreshPixmaps( int pageNumber )
                 break;
             }
         }
-        const QList<Tile> tiles = tilesManager->tilesAt( visibleRect, TilesManager::TerminalTile );
-        QList<Tile>::const_iterator tIt = tiles.constBegin(), tEnd = tiles.constEnd();
-        while ( tIt != tEnd )
+
+        if ( !visibleRect.isNull() )
         {
-            Tile tile = *tIt;
-            if ( tilesRect.isNull() )
-                tilesRect = tile.rect();
-            else
-                tilesRect |= tile.rect();
-
-            tIt++;
+            p->setNormalizedRect( visibleRect );
+            p->setTile( true );
+            p->d->mForce = true;
+            requestedPixmaps.push_back( p );
         }
-
-        p->setNormalizedRect( tilesRect );
-        p->setTile( true );
-        p->d->mForce = true;
-        requestedPixmaps.push_back( p );
+        else
+        {
+            delete p;
+        }
     }
     if ( !requestedPixmaps.isEmpty() )
         m_parent->requestPixmaps( requestedPixmaps, Okular::Document::NoOption );
@@ -2006,8 +2009,6 @@ Document::Document( QWidget *widget )
     d->m_undoStack = new QUndoStack(this);
     d->m_tiledObserver = 0;
 
-    connect( PageController::self(), SIGNAL(rotationFinished(int,Okular::Page*)),
-             this, SLOT(rotationFinished(int,Okular::Page*)) );
     connect( SettingsCore::self(), SIGNAL(configChanged()), this, SLOT(_o_configChanged()) );
     connect( d->m_undoStack, SIGNAL( canUndoChanged(bool) ), this, SIGNAL( canUndoChanged(bool)));
     connect( d->m_undoStack, SIGNAL( canRedoChanged(bool) ), this, SIGNAL( canRedoChanged(bool) ) );
@@ -2116,8 +2117,8 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
         if ( offers.isEmpty() )
         {
             // There's still no offers, do a final mime search based on the filename
-            // We need this becuase sometimes (e.g. when downloading from a webserver) the mimetype we
-            // use is the one feeded by the server, that may be wrong
+            // We need this because sometimes (e.g. when downloading from a webserver) the mimetype we
+            // use is the one fed by the server, that may be wrong
             newmime = KMimeType::findByUrl( docFile );
             if ( newmime->name() != mime->name() )
             {
@@ -2181,6 +2182,9 @@ bool Document::openDocument( const QString & docFile, const KUrl& url, const KMi
     }
 
     d->m_generatorName = offer->name();
+    d->m_pageController = new PageController();
+    connect( d->m_pageController, SIGNAL(rotationFinished(int,Okular::Page*)),
+             this, SLOT(rotationFinished(int,Okular::Page*)) );
 
     bool containsExternalAnnotations = false;
     foreach ( Page * p, d->m_pagesVector )
@@ -2281,6 +2285,9 @@ void Document::closeDocument()
     // check if there's anything to close...
     if ( !d->m_generator )
         return;
+
+    delete d->m_pageController;
+    d->m_pageController = 0;
 
     delete d->m_scripter;
     d->m_scripter = 0;
@@ -2786,7 +2793,7 @@ void Document::requestPixmaps( const QLinkedList< PixmapRequest * > & requests, 
     }
 
     // 1. [CLEAN STACK] remove previous requests of requesterID
-    // FIXME This asumes all requests come from the same observer, that is true atm but not enforced anywhere
+    // FIXME This assumes all requests come from the same observer, that is true atm but not enforced anywhere
     DocumentObserver *requesterObserver = requests.first()->observer();
     QSet< int > requestedPages;
     {
@@ -3406,6 +3413,54 @@ void Document::undo()
 void Document::redo()
 {
     d->m_undoStack->redo();
+}
+
+void Document::editFormText( int pageNumber,
+                             Okular::FormFieldText* form,
+                             const QString & newContents,
+                             int newCursorPos,
+                             int prevCursorPos,
+                             int prevAnchorPos )
+{
+    QUndoCommand *uc = new EditFormTextCommand( this, form, pageNumber, newContents, newCursorPos, form->text(), prevCursorPos, prevAnchorPos );
+    d->m_undoStack->push( uc );
+}
+
+void Document::editFormList( int pageNumber,
+                             FormFieldChoice* form,
+                             const QList< int > & newChoices )
+{
+    const QList< int > prevChoices = form->currentChoices();
+    QUndoCommand *uc = new EditFormListCommand( this, form, pageNumber, newChoices, prevChoices );
+    d->m_undoStack->push( uc );
+}
+
+void Document::editFormCombo( int pageNumber,
+                              FormFieldChoice* form,
+                              const QString & newText,
+                              int newCursorPos,
+                              int prevCursorPos,
+                              int prevAnchorPos )
+{
+
+    QString prevText;
+    if ( form->currentChoices().isEmpty() )
+    {
+        prevText = form->editChoice();
+    }
+    else
+    {
+        prevText = form->choices()[form->currentChoices()[0]];
+    }
+
+    QUndoCommand *uc = new EditFormComboCommand( this, form, pageNumber, newText, newCursorPos, prevText, prevCursorPos, prevAnchorPos );
+    d->m_undoStack->push( uc );
+}
+
+void Document::editFormButtons( int pageNumber, const QList< FormFieldButton* >& formButtons, const QList< bool >& newButtonStates )
+{
+    QUndoCommand *uc = new EditFormButtonsCommand( this, pageNumber, formButtons, newButtonStates );
+    d->m_undoStack->push( uc );
 }
 
 BookmarkManager * Document::bookmarkManager() const

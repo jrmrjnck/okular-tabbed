@@ -49,6 +49,8 @@
 
 using namespace Okular;
 
+static const double distanceConsideredEqual = 25; // 5px
+
 static void deleteObjectRects( QLinkedList< ObjectRect * >& rects, const QSet<ObjectRect::ObjectType>& which )
 {
     QLinkedList< ObjectRect * >::iterator it = rects.begin(), end = rects.end();
@@ -267,7 +269,7 @@ bool Page::hasObjectRect( double x, double y, double xScale, double yScale ) con
 
     QLinkedList< ObjectRect * >::const_iterator it = m_rects.begin(), end = m_rects.end();
     for ( ; it != end; ++it )
-        if ( (*it)->contains( x, y, xScale, yScale ) )
+        if ( (*it)->distanceSqr( x, y, xScale, yScale ) < distanceConsideredEqual )
             return true;
 
     return false;
@@ -387,7 +389,7 @@ void PagePrivate::rotateAt( Rotation orientation )
 
         RotationJob *job = new RotationJob( object.m_pixmap->toImage(), object.m_rotation, m_rotation, it.key() );
         job->setPage( this );
-        PageController::self()->addRotationJob(job);
+        m_doc->m_pageController->addRotationJob(job);
     }
 
     /**
@@ -428,10 +430,16 @@ void PagePrivate::changeSize( const PageSize &size )
 
 const ObjectRect * Page::objectRect( ObjectRect::ObjectType type, double x, double y, double xScale, double yScale ) const
 {
-    QLinkedList< ObjectRect * >::const_iterator it = m_rects.begin(), end = m_rects.end();
-    for ( ; it != end; ++it )
-        if ( ( (*it)->objectType() == type ) && (*it)->contains( x, y, xScale, yScale ) )
-            return *it;
+    // Walk list in reverse order so that annotations in the foreground are preferred
+    QLinkedListIterator< ObjectRect * > it( m_rects );
+    it.toBack();
+    while ( it.hasPrevious() )
+    {
+        const ObjectRect *objrect = it.previous();
+        if ( ( objrect->objectType() == type ) && objrect->distanceSqr( x, y, xScale, yScale ) < distanceConsideredEqual )
+            return objrect;
+    }
+
     return 0;
 }
 
@@ -439,10 +447,14 @@ QLinkedList< const ObjectRect * > Page::objectRects( ObjectRect::ObjectType type
 {
     QLinkedList< const ObjectRect * > result;
 
-    QLinkedList< ObjectRect * >::const_iterator it = m_rects.begin(), end = m_rects.end();
-    for ( ; it != end; ++it )
-        if ( ( (*it)->objectType() == type ) && (*it)->contains( x, y, xScale, yScale ) )
-            result.append( *it );
+    QLinkedListIterator< ObjectRect * > it( m_rects );
+    it.toBack();
+    while ( it.hasPrevious() )
+    {
+        const ObjectRect *objrect = it.previous();
+        if ( ( objrect->objectType() == type ) && objrect->distanceSqr( x, y, xScale, yScale ) < distanceConsideredEqual )
+            result.append( objrect );
+    }
 
     return result;
 }
@@ -528,7 +540,7 @@ void Page::setPixmap( DocumentObserver *observer, QPixmap *pixmap, const Normali
         RotationJob *job = new RotationJob( pixmap->toImage(), Rotation0, d->m_rotation, observer );
         job->setPage( d );
         job->setRect( TilesManager::toRotatedRect( rect, d->m_rotation ) );
-        PageController::self()->addRotationJob(job);
+        d->m_doc->m_pageController->addRotationJob(job);
 
         delete pixmap;
     }

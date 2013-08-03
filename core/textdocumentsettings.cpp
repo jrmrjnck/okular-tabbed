@@ -32,7 +32,7 @@ TextDocumentSettingsWidget::TextDocumentSettingsWidget( QWidget *parent )
 
     d->mUi->setupUi( this );
 
-    // @notice I think this will be usefull in future.
+    // @notice I think this will be useful in future.
 #define ADD_WIDGET( property, widget, objectName, labelName )        \
     d->property = new widget( this );                                \
     d->property->setObjectName( QString::fromUtf8( objectName ) );   \
@@ -54,13 +54,6 @@ void TextDocumentSettingsWidget::addRow( const QString& labelText, QWidget *widg
     Q_D( TextDocumentSettingsWidget );
 
     d->mUi->formLayout->addRow( labelText, widget );
-}
-
-QFont TextDocumentSettingsWidget::font() const
-{
-    Q_D( const TextDocumentSettingsWidget );
-
-    return d->mFont->font();
 }
 
 
