@@ -27,8 +27,8 @@ static bool attachUniqueInstance(KCmdLineArgs* args)
     if (!args->isSet("unique") || args->count() != 1)
         return false;
 
-    QDBusInterface iface("org.kde.okular", "/okular1", "org.kde.okular");
-    QDBusInterface iface2("org.kde.okular", "/okularshell", "org.kde.okularshell");
+    QDBusInterface iface("org.kde.okular", "/okular", "org.kde.okular");
+    QDBusInterface iface2("org.kde.okular", "/okulashell", "org.kde.okular");
     if (!iface.isValid() || !iface2.isValid())
         return false;
 
@@ -64,7 +64,7 @@ static bool attachExistingInstance( KCmdLineArgs* args )
         // Query all services to find the last activated instance
         if( service.startsWith(pattern) && !service.endsWith(myPid) )
         {
-            QDBusInterface* iface = new QDBusInterface( service, QLatin1String("/okularshell"), QLatin1String("org.kde.okularshell") );
+            QDBusInterface* iface = new QDBusInterface( service, QLatin1String("/okularshell"), QLatin1String("org.kde.okular") );
             QDBusReply<QDateTime> reply = iface->call( QLatin1String("lastActivationTime") );
             if( reply.isValid() )
             {

@@ -46,7 +46,7 @@ namespace KActivities { class ResourceInstance; }
 class Shell : public KParts::MainWindow
 {
   Q_OBJECT
-  Q_CLASSINFO("D-Bus Interface", "org.kde.okularshell")
+  Q_CLASSINFO("D-Bus Interface", "org.kde.okular")
 
 public:
   /**

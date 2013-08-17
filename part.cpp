@@ -321,8 +321,11 @@ m_cliPresentation(false), m_cliPrint(false), m_embedMode(detectEmbedMode(parentW
     Okular::Settings::instance( configFileName );
     
     numberOfParts++;
-    m_dbusObjectName = QString::fromLatin1("/okular%1").arg(numberOfParts);
-    QDBusConnection::sessionBus().registerObject( m_dbusObjectName, this, QDBusConnection::ExportScriptableSlots );
+    if (numberOfParts == 1) {
+        QDBusConnection::sessionBus().registerObject("/okular", this, QDBusConnection::ExportScriptableSlots);
+    } else {
+        QDBusConnection::sessionBus().registerObject(QString("/okular%1").arg(numberOfParts), this, QDBusConnection::ExportScriptableSlots);
+    }
 
     // connect the started signal to tell the job the mimetypes we like,
     // and get some more information from it
