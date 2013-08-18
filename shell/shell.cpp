@@ -92,7 +92,7 @@ void Shell::init()
   }
 
   // now that the Part plugin is loaded, create the part
-  KParts::ReadWritePart* firstPart = m_partFactory->create< KParts::ReadWritePart >( this );
+  KParts::ReadWritePart* const firstPart = m_partFactory->create< KParts::ReadWritePart >( this );
   if (firstPart)
   {
     // Setup tab bar
@@ -106,7 +106,7 @@ void Shell::init()
     connect( m_tabBar, SIGNAL(mouseMiddleClick(int)), SLOT(closeTab(int)) );
     connect( m_tabBar, SIGNAL(tabMoved(int,int)), SLOT(moveTab(int,int)) );
 
-    QWidget* centralWidget = new QWidget( this );
+    QWidget* const centralWidget = new QWidget( this );
     m_viewStack = new QStackedWidget( this );
     m_viewStack->addWidget( firstPart->widget() );
 
@@ -159,8 +159,8 @@ void Shell::delayedOpen()
     {
         for( int i = 0; i < m_args->count(); ++i )
         {
-            KUrl url = ShellUtils::urlFromArg(m_args->arg(i),
-                           ShellUtils::qfileExistFunc(), m_args->getOption("page"));
+            const KUrl url = ShellUtils::urlFromArg(m_args->arg(i),
+                                 ShellUtils::qfileExistFunc(), m_args->getOption("page"));
             if( url.isValid() )
                 openUrl( url );
         }
@@ -214,7 +214,7 @@ void Shell::openUrl( const KUrl & url )
     }
     else
     {
-        KParts::ReadWritePart* emptyPart = m_tabs[m_activeTab].part;
+        KParts::ReadWritePart* const emptyPart = m_tabs[m_activeTab].part;
         if ( m_args ){
             KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(emptyPart);
             if ( doc && m_args->isSet( "presentation" ) )
@@ -307,7 +307,7 @@ void Shell::setupActions()
     m_prevTabAction->setEnabled( false );
     connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
 
-    KConfigGroup group = KGlobal::config()->group( "Notification Messages" );
+    const KConfigGroup group = KGlobal::config()->group( "Notification Messages" );
     m_confirmTabsClose = actionCollection()->add<KToggleAction>("confirm_tabs_close");
     m_confirmTabsClose->setText(i18n("Confirm Closing Multiple Tabs"));
     m_confirmTabsClose->setChecked( !group.hasKey("CloseMultipleTabs") );
@@ -358,7 +358,7 @@ void Shell::fileOpen()
 	// button is clicked
     if ( !m_fileformatsscanned )
     {
-        KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(m_tabs[m_activeTab].part);
+        const KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(m_tabs[m_activeTab].part);
         if ( doc )
             m_fileformats = doc->supportedMimeTypes();
 
@@ -369,7 +369,7 @@ void Shell::fileOpen()
     }
 
     QString startDir;
-    KParts::ReadWritePart* curPart = m_tabs[m_activeTab].part;
+    const KParts::ReadWritePart* const curPart = m_tabs[m_activeTab].part;
     if ( curPart->url().isLocalFile() )
         startDir = curPart->url().toLocalFile();
     KFileDialog dlg( startDir, QString(), this );
@@ -467,7 +467,7 @@ bool Shell::queryClose()
 {
     if( m_tabs.size() > 1 )
     {
-        int sel = KMessageBox::warningYesNoCancel(
+        const int sel = KMessageBox::warningYesNoCancel(
            this,
            i18n("You have multiple tabs open in this window, are you sure you want to quit?"),
            i18n("Confimation"),
@@ -512,7 +512,7 @@ void Shell::closeTab( int tab )
     m_tabs[tab].part->closeUrl();
     if( m_tabs.count() > 1 )
     {
-        KParts::ReadWritePart* part = m_tabs[tab].part;
+        KParts::ReadWritePart* const part = m_tabs[tab].part;
         m_viewStack->removeWidget( part->widget() );
         if( part->factory() )
             part->factory()->removeClient( part );
@@ -531,18 +531,18 @@ void Shell::closeTab( int tab )
     }
 }
 
-void Shell::openTabContextMenu( int tab, QPoint point )
+void Shell::openTabContextMenu( int tab, const QPoint& point )
 {
     // Mostly borrowed from DolphinMainWindow::openTabContextMenu
     KMenu menu( this );
-    QAction* dupTabAction         = menu.addAction(KIcon("tab-duplicate"), i18n("Duplicate Tab"));
-    QAction* detachTabAction      = menu.addAction(KIcon("tab-detach"), i18n("Detach Tab"));
-    QAction* closeOtherTabsAction = menu.addAction(KIcon("tab-close-other"), i18n("Close Other Tabs"));
-    QAction* closeTabAction       = menu.addAction(KIcon("tab-close"), i18n("Close Tab"));
+    const QAction* const dupTabAction         = menu.addAction(KIcon("tab-duplicate"), i18n("Duplicate Tab"));
+    const QAction* const detachTabAction      = menu.addAction(KIcon("tab-detach"), i18n("Detach Tab"));
+    const QAction* const closeOtherTabsAction = menu.addAction(KIcon("tab-close-other"), i18n("Close Other Tabs"));
+          QAction* const closeTabAction       = menu.addAction(KIcon("tab-close"), i18n("Close Tab"));
     closeTabAction->setShortcut( m_closeAction->shortcut().primary() );
     closeTabAction->setEnabled( m_tabs[tab].closeEnabled );
 
-    QAction* selAction = menu.exec( point );
+    const QAction* const selAction = menu.exec( point );
 
     if( selAction == dupTabAction )
     {
@@ -559,7 +559,7 @@ void Shell::openTabContextMenu( int tab, QPoint point )
     }
     else if( selAction == closeOtherTabsAction )
     {
-        int count = m_tabs.size();
+        const int count = m_tabs.size();
         for( int i = 0; i < tab; ++i )
             closeTab(0);
 
@@ -582,7 +582,7 @@ void Shell::openNewTab( const KUrl& url, int desiredIndex )
     // Tabs are hidden when there's only one, so show it
     if( m_tabs.size() == 1 )
     {
-        KUrl firstUrl = m_tabs[0].part->url();
+        const KUrl firstUrl = m_tabs[0].part->url();
         m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
         m_nextTabAction->setEnabled( true );
         m_prevTabAction->setEnabled( true );
@@ -591,7 +591,7 @@ void Shell::openNewTab( const KUrl& url, int desiredIndex )
     if( desiredIndex > m_tabs.size() )
        desiredIndex = m_tabs.size();
 
-    int newIndex = (desiredIndex >= 0) ? desiredIndex : m_tabs.size();
+    const int newIndex = (desiredIndex >= 0) ? desiredIndex : m_tabs.size();
 
     // Make new part
     m_tabs.insert( newIndex, m_partFactory->create<KParts::ReadWritePart>(this) );
@@ -623,8 +623,8 @@ void Shell::print()
 void Shell::setPrintEnabled( bool enabled )
 {
     // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
-    KParts::ReadWritePart* part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( part == NULL )
+    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( part == 0 )
        return;
 
     for( int i = 0; i < m_tabs.size(); ++i )
@@ -642,8 +642,8 @@ void Shell::setPrintEnabled( bool enabled )
 void Shell::setCloseEnabled( bool enabled )
 {
     // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
-    KParts::ReadWritePart* part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( part == NULL )
+    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( part == 0 )
        return;
 
     for( int i = 0; i < m_tabs.size(); ++i )
@@ -677,7 +677,7 @@ void Shell::activateNextTab()
     if( m_tabs.size() < 2 )
         return;
 
-    int nextTab = (m_activeTab == m_tabs.size()-1) ? 0 : m_activeTab+1;
+    const int nextTab = (m_activeTab == m_tabs.size()-1) ? 0 : m_activeTab+1;
 
     setActiveTab( nextTab );
 }
@@ -687,7 +687,7 @@ void Shell::activatePrevTab()
     if( m_tabs.size() < 2 )
         return;
 
-    int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
+    const int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
 
     setActiveTab( prevTab );
 }

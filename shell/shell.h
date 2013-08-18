@@ -110,7 +110,7 @@ private slots:
   // Tab event handlers
   void setActiveTab( int tab );
   void closeTab( int tab );
-  void openTabContextMenu( int tab, QPoint point );
+  void openTabContextMenu( int tab, const QPoint& point );
   void moveTab( int from, int to );
   void activateNextTab();
   void activatePrevTab();

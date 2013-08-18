@@ -20,7 +20,6 @@
 #include <QTextStream>
 #include "aboutdata.h"
 #include "shellutils.h"
-#include <iostream>
 
 static bool attachUniqueInstance(KCmdLineArgs* args)
 {
@@ -50,12 +49,12 @@ static bool attachExistingInstance( KCmdLineArgs* args )
     if( args->isSet("new") || args->count() == 0 )
         return false;
 
-    QStringList services = QDBusConnection::sessionBus().interface()->registeredServiceNames().value();
+    const QStringList services = QDBusConnection::sessionBus().interface()->registeredServiceNames().value();
 
     // Dont match the service without trailing "-" b/c that's the unique instance
-    QString pattern = "org.kde.okular-";
-    QString myPid = QString::number(kapp->applicationPid());
-    QDBusInterface* bestService = NULL;
+    const QString pattern = "org.kde.okular-";
+    const QString myPid = QString::number(kapp->applicationPid());
+    QDBusInterface* bestService = 0;
     QDateTime latestTime;
     latestTime.setMSecsSinceEpoch( 0 );
 
@@ -65,7 +64,7 @@ static bool attachExistingInstance( KCmdLineArgs* args )
         if( service.startsWith(pattern) && !service.endsWith(myPid) )
         {
             QDBusInterface* iface = new QDBusInterface( service, QLatin1String("/okularshell"), QLatin1String("org.kde.okular") );
-            QDBusReply<QDateTime> reply = iface->call( QLatin1String("lastActivationTime") );
+            const QDBusReply<QDateTime> reply = iface->call( QLatin1String("lastActivationTime") );
             if( reply.isValid() )
             {
                 QDateTime time = reply.value();
@@ -74,14 +73,14 @@ static bool attachExistingInstance( KCmdLineArgs* args )
                     latestTime = time;
                     delete bestService;
                     bestService = iface;
-                    iface = NULL;
+                    iface = 0;
                 }
             }
             delete iface;
         }
     }
 
-    if( bestService == NULL )
+    if( bestService == 0 )
         return false;
 
     for( int i = 0; i < args->count(); ++i )
