@@ -322,10 +322,11 @@ m_cliPresentation(false), m_cliPrint(false), m_embedMode(detectEmbedMode(parentW
     
     numberOfParts++;
     if (numberOfParts == 1) {
-        QDBusConnection::sessionBus().registerObject("/okular", this, QDBusConnection::ExportScriptableSlots);
+        m_dbusObjectName = "/okular";
     } else {
-        QDBusConnection::sessionBus().registerObject(QString("/okular%1").arg(numberOfParts), this, QDBusConnection::ExportScriptableSlots);
+        m_dbusObjectName = QString("/okular%1").arg(numberOfParts);
     }
+    QDBusConnection::sessionBus().registerObject(m_dbusObjectName, this, QDBusConnection::ExportScriptableSlots);
 
     // connect the started signal to tell the job the mimetypes we like,
     // and get some more information from it
