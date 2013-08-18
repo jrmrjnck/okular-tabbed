@@ -27,7 +27,7 @@ static bool attachUniqueInstance(KCmdLineArgs* args)
         return false;
 
     QDBusInterface iface("org.kde.okular", "/okular", "org.kde.okular");
-    QDBusInterface iface2("org.kde.okular", "/okulashell", "org.kde.okular");
+    QDBusInterface iface2("org.kde.okular", "/okularshell", "org.kde.okular");
     if (!iface.isValid() || !iface2.isValid())
         return false;
 
