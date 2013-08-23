@@ -624,7 +624,7 @@ void Shell::setPrintEnabled( bool enabled )
 {
     // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
     const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( part == 0 )
+    if( !part )
        return;
 
     for( int i = 0; i < m_tabs.size(); ++i )
@@ -643,7 +643,7 @@ void Shell::setCloseEnabled( bool enabled )
 {
     // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
     const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( part == 0 )
+    if( !part )
        return;
 
     for( int i = 0; i < m_tabs.size(); ++i )

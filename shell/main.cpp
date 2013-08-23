@@ -80,7 +80,7 @@ static bool attachExistingInstance( KCmdLineArgs* args )
         }
     }
 
-    if( bestService == 0 )
+    if( !bestService )
         return false;
 
     for( int i = 0; i < args->count(); ++i )
