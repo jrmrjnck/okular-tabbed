@@ -46,7 +46,7 @@
 #include <ktabbar.h>
 #include <QVBoxLayout>
 #include <QStackedWidget>
-#include "kxmlguifactory.h"
+#include <kxmlguifactory.h>
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
