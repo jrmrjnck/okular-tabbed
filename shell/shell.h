@@ -23,6 +23,10 @@
 class KCmdLineArgs;
 class KRecentFilesAction;
 class KToggleAction;
+class KTabBar;
+class QVBoxLayout;
+class QStackedWidget;
+class KPluginFactory;
 
 class KDocumentViewer;
 class Part;
@@ -91,6 +95,16 @@ private slots:
   void delayedOpen();
   void showOpenRecentMenu();
   void closeUrl();
+  void print();
+  void setPrintEnabled( bool enabled );
+  void setCloseEnabled( bool enabled );
+
+  // Tab event handlers
+  void setActiveTab( int tab );
+  void closeTab( int tab );
+  void moveTab( int from, int to );
+  void activateNextTab();
+  void activatePrevTab();
 
 signals:
   void restoreDocument(const KConfigGroup &group);
@@ -101,11 +115,13 @@ private:
   void setupActions();
   void init();
   QStringList fileFormats() const;
+  void openNewTab( const KUrl& url, int desiredIndex = -1 );
+  void connectPart( QObject* part );
+  KIcon getIcon( const KUrl& url );
 
 private:
   KCmdLineArgs* m_args;
-  KParts::ReadWritePart* m_part;
-  KDocumentViewer* m_doc;
+  KPluginFactory* m_partFactory;
   KRecentFilesAction* m_recent;
   QStringList m_fileformats;
   bool m_fileformatsscanned;
@@ -116,6 +132,25 @@ private:
   bool m_menuBarWasShown, m_toolBarWasShown;
   bool m_unique;
   KUrl m_openUrl;
+  QVBoxLayout* m_centralLayout;
+  KTabBar* m_tabBar;
+  QStackedWidget* m_viewStack;
+
+  struct TabState
+  {
+    TabState( KParts::ReadWritePart* p )
+      : part(p),
+        printEnabled(false),
+        closeEnabled(false)
+    {}
+    KParts::ReadWritePart* part;
+    bool printEnabled;
+    bool closeEnabled;
+  };
+  QList<TabState> m_tabs;
+  int m_activeTab;
+  KAction* m_nextTabAction;
+  KAction* m_prevTabAction;
 
 #ifdef KActivities_FOUND
   KActivities::ResourceInstance* m_activityResource;

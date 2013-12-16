@@ -43,6 +43,10 @@
 #include <ktogglefullscreenaction.h>
 #include <kactioncollection.h>
 #include <kwindowsystem.h>
+#include <ktabbar.h>
+#include <QVBoxLayout>
+#include <QStackedWidget>
+#include "kxmlguifactory.h"
 
 #ifdef KActivities_FOUND
 #include <KActivities/ResourceInstance>
@@ -75,45 +79,58 @@ void Shell::init()
   setContextMenuPolicy( Qt::NoContextMenu );
   // set the shell's ui resource file
   setXMLFile("shell.rc");
-  m_doc=0L;
   m_fileformatsscanned = false;
   m_showMenuBarAction = 0;
   // this routine will find and load our Part.  it finds the Part by
   // name which is a bad idea usually.. but it's alright in this
   // case since our Part is made for this Shell
-  KPluginFactory *factory = KPluginLoader("okularpart").factory();
-  if (!factory)
+  m_partFactory = KPluginLoader("okularpart").factory();
+  if (!m_partFactory)
   {
     // if we couldn't find our Part, we exit since the Shell by
     // itself can't do anything useful
     KMessageBox::error(this, i18n("Unable to find the Okular component."));
-    m_part = 0;
     return;
   }
 
   // now that the Part plugin is loaded, create the part
-  m_part = factory->create< KParts::ReadWritePart >( this );
-  if (m_part)
+  KParts::ReadWritePart* const firstPart = m_partFactory->create< KParts::ReadWritePart >( this );
+  if (firstPart)
   {
+    // Setup tab bar
+    m_tabBar = new KTabBar( this );
+    m_tabBar->setTabsClosable( true );
+    m_tabBar->setElideMode( Qt::ElideRight );
+    connect( m_tabBar, SIGNAL(currentChanged(int)), SLOT(setActiveTab(int)) );
+    connect( m_tabBar, SIGNAL(tabCloseRequested(int)), SLOT(closeTab(int)) );
+
+    QWidget* const centralWidget = new QWidget( this );
+    m_viewStack = new QStackedWidget( this );
+    m_viewStack->addWidget( firstPart->widget() );
+
+    m_centralLayout = new QVBoxLayout( centralWidget );
+    m_centralLayout->setSpacing( 0 );
+    m_centralLayout->setMargin( 0 );
+    m_centralLayout->addWidget( m_tabBar );
+    m_centralLayout->addWidget( m_viewStack );
+    setCentralWidget( centralWidget );
+
+    m_tabs.append( firstPart );
+    m_activeTab = 0;
+
     // then, setup our actions
     setupActions();
-    // tell the KParts::MainWindow that this is indeed the main widget
-    setCentralWidget(m_part->widget());
     // and integrate the part's GUI with the shell's
     setupGUI(Keys | ToolBar | Save);
-    createGUI(m_part);
-    m_doc = qobject_cast<KDocumentViewer*>(m_part);
-    connect( this, SIGNAL(restoreDocument(KConfigGroup)),m_part, SLOT(restoreDocument(KConfigGroup)));
-    connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), m_part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
-    connect( m_part, SIGNAL(enablePrintAction(bool)), m_printAction, SLOT(setEnabled(bool)));
-    connect( m_part, SIGNAL(enableCloseAction(bool)), m_closeAction, SLOT(setEnabled(bool)));
+    createGUI(firstPart);
 
-    readSettings();
+    connectPart( firstPart );
 
     if (m_args && m_args->isSet("unique") && m_args->count() == 1)
     {
         QDBusConnection::sessionBus().registerService("org.kde.okular");
     }
+    readSettings();
 
     m_unique = false;
     if (m_args && m_args->isSet("unique") && m_args->count() <= 1)
@@ -150,21 +167,26 @@ void Shell::showOpenRecentMenu()
 
 Shell::~Shell()
 {
-    if ( m_part )
+    if( !m_tabs.empty() )
     {
         writeSettings();
-        m_part->closeUrl( false );
+        for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
+        {
+           it->part->closeUrl( false );
+        }
     }
-    m_part = 0; // It is deleted by the KPart/QObject machinery
     if ( m_args )
         m_args->clear();
 }
 
 void Shell::openUrl( const KUrl & url )
 {
-    if ( m_part )
+    if( m_tabs.size() == 0 )
+        return;
+
+    if( !m_tabs[m_activeTab].part->url().isEmpty() )
     {
-        if( !m_part->url().isEmpty() )
+        if( m_unique )
         {
             if( m_unique )
             {
@@ -179,36 +201,43 @@ void Shell::openUrl( const KUrl & url )
         }
         else
         {
-            if ( m_args ){
-                if ( m_doc && m_args->isSet( "presentation" ) )
-                    m_doc->startPresentation();
-                if ( m_args->isSet( "print" ) )
-                    QMetaObject::invokeMethod( m_part, "enableStartWithPrint" );
-            }
-            bool openOk = m_part->openUrl( url );
-            const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
-            if ( !isstdin )
+            openNewTab( url );
+            setActiveTab( m_tabs.size()-1 );
+        }
+    }
+    else
+    {
+        KParts::ReadWritePart* const emptyPart = m_tabs[m_activeTab].part;
+        if ( m_args ){
+            KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(emptyPart);
+            if ( doc && m_args->isSet( "presentation" ) )
+                doc->startPresentation();
+            if ( m_args->isSet( "print" ) )
+                QMetaObject::invokeMethod( emptyPart, "enableStartWithPrint" );
+        }
+        bool openOk = emptyPart->openUrl( url );
+        const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
+        if ( !isstdin )
+        {
+            if ( openOk )
             {
-                if ( openOk )
-                {
 #ifdef KActivities_FOUND
-                    if ( !m_activityResource )
-                        m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
+                if ( !m_activityResource )
+                    m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
 
-                    m_activityResource->setUri( url );
+                m_activityResource->setUri( url );
 #endif
-                    m_recent->addUrl( url );
-                }
-                else
-                    m_recent->removeUrl( url );
+                m_recent->addUrl( url );
             }
+            else
+                m_recent->removeUrl( url );
         }
     }
 }
 
 void Shell::closeUrl()
 {
-    m_part->closeUrl();
+    closeTab( m_activeTab );
 }
 
 void Shell::readSettings()
@@ -248,16 +277,28 @@ void Shell::setupActions()
   connect( m_recent, SIGNAL(triggered()), this, SLOT(showOpenRecentMenu()) );
   m_recent->setToolTip( i18n("Click to open a file\nClick and hold to open a recent file") );
   m_recent->setWhatsThis( i18n( "<b>Click</b> to open a file or <b>Click and hold</b> to select a recent file" ) );
-  m_printAction = KStandardAction::print( m_part, SLOT(slotPrint()), actionCollection() );
+  m_printAction = KStandardAction::print( this, SLOT(print()), actionCollection() );
   m_printAction->setEnabled( false );
   m_closeAction = KStandardAction::close( this, SLOT(closeUrl()), actionCollection() );
   m_closeAction->setEnabled( false );
-  KStandardAction::quit(this, SLOT(slotQuit()), actionCollection());
+  KStandardAction::quit(this, SLOT(close()), actionCollection());
 
   setStandardToolBarMenuEnabled(true);
 
   m_showMenuBarAction = KStandardAction::showMenubar( this, SLOT(slotShowMenubar()), actionCollection());
   m_fullScreenAction = KStandardAction::fullScreen( this, SLOT(slotUpdateFullScreen()), this,actionCollection() );
+
+    m_nextTabAction = actionCollection()->addAction("tab-next");
+    m_nextTabAction->setText( i18n("Next Tab") );
+    m_nextTabAction->setShortcut( QKeySequence::NextChild );
+    m_nextTabAction->setEnabled( false );
+    connect( m_nextTabAction, SIGNAL(triggered()), this, SLOT(activateNextTab()) );
+
+    m_prevTabAction = actionCollection()->addAction("tab-previous");
+    m_prevTabAction->setText( i18n("Previous Tab") );
+    m_prevTabAction->setShortcut( QKeySequence::PreviousChild );
+    m_prevTabAction->setEnabled( false );
+    connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
 }
 
 void Shell::saveProperties(KConfigGroup &group)
@@ -274,10 +315,7 @@ void Shell::readProperties(const KConfigGroup &group)
   // config file.  this function is automatically called whenever
   // the app is being restored.  read in here whatever you wrote
   // in 'saveProperties'
-  if(m_part)
-  {
     emit restoreDocument(group);
-  }
 }
 
 QStringList Shell::fileFormats() const
@@ -307,8 +345,9 @@ void Shell::fileOpen()
 	// button is clicked
     if ( !m_fileformatsscanned )
     {
-        if ( m_doc )
-            m_fileformats = m_doc->supportedMimeTypes();
+        const KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(m_tabs[m_activeTab].part);
+        if ( doc )
+            m_fileformats = doc->supportedMimeTypes();
 
         if ( m_fileformats.isEmpty() )
             m_fileformats = fileFormats();
@@ -317,8 +356,9 @@ void Shell::fileOpen()
     }
 
     QString startDir;
-    if ( m_part->url().isLocalFile() )
-        startDir = m_part->url().toLocalFile();
+    const KParts::ReadWritePart* const curPart = m_tabs[m_activeTab].part;
+    if ( curPart->url().isLocalFile() )
+        startDir = curPart->url().toLocalFile();
     KFileDialog dlg( startDir, QString(), this );
     dlg.setOperationMode( KFileDialog::Opening );
 
@@ -411,7 +451,181 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
-    return m_part ? m_part->queryClose() : true;
+    if( m_tabs.size() > 1 )
+    {
+        const int sel = KMessageBox::warningYesNoCancel(
+           this,
+           i18n("You have multiple tabs open in this window, are you sure you want to quit?"),
+           i18n("Confimation"),
+           KStandardGuiItem::quit(),
+           KGuiItem(i18n("Close Current Tab"),"tab-close"),
+           KStandardGuiItem::cancel(),
+           i18n("CloseMultipleTabs") );
+
+        if( sel == KMessageBox::Cancel )
+            return false;
+
+        if( sel == KMessageBox::No )
+        {
+           closeTab( m_activeTab );
+           return false;
+        }
+    }
+
+    bool ret = true;
+    for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
+    {
+        ret = ret && it->part->queryClose();
+    }
+    return ret;
+}
+
+void Shell::setActiveTab( int tab )
+{
+    if( tab == -1 )
+        return;
+
+    m_activeTab = tab;
+    m_tabBar->setCurrentIndex( tab );
+    m_viewStack->setCurrentWidget( m_tabs[tab].part->widget() );
+    createGUI( m_tabs[tab].part );
+    m_printAction->setEnabled( m_tabs[tab].printEnabled );
+    m_closeAction->setEnabled( m_tabs[tab].closeEnabled );
+}
+
+void Shell::closeTab( int tab )
+{
+    m_tabs[tab].part->closeUrl();
+    if( m_tabs.count() > 1 )
+    {
+        KParts::ReadWritePart* const part = m_tabs[tab].part;
+        m_viewStack->removeWidget( part->widget() );
+        if( part->factory() )
+            part->factory()->removeClient( part );
+        part->disconnect();
+        part->deleteLater();
+        m_tabs.removeAt( tab );
+    }
+
+    m_tabBar->removeTab( tab );
+
+    if( m_tabBar->count() == 1 )
+    {
+        m_tabBar->removeTab( 0 );
+        m_nextTabAction->setEnabled( false );
+        m_prevTabAction->setEnabled( false );
+    }
+}
+
+void Shell::moveTab( int from, int to )
+{
+    m_tabs.move( from, to );
+}
+
+void Shell::openNewTab( const KUrl& url, int desiredIndex )
+{
+    // Tabs are hidden when there's only one, so show it
+    if( m_tabs.size() == 1 )
+    {
+        const KUrl firstUrl = m_tabs[0].part->url();
+        m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
+        m_nextTabAction->setEnabled( true );
+        m_prevTabAction->setEnabled( true );
+    }
+
+    if( desiredIndex > m_tabs.size() )
+       desiredIndex = m_tabs.size();
+
+    const int newIndex = (desiredIndex >= 0) ? desiredIndex : m_tabs.size();
+
+    // Make new part
+    m_tabs.insert( newIndex, m_partFactory->create<KParts::ReadWritePart>(this) );
+    connectPart( m_tabs[newIndex].part );
+
+    // Update GUI
+    m_viewStack->addWidget( m_tabs[newIndex].part->widget() );
+    m_tabBar->insertTab( newIndex, getIcon(url), url.fileName() );
+
+    if( m_tabs[newIndex].part->openUrl(url) )
+        m_recent->addUrl( url );
+}
+
+void Shell::connectPart( QObject* part )
+{
+    // These signals and slots defined in Okular::Part, but since we don't
+    // have access to that class, just pass in a KParts::Part* for brevity
+    connect( this, SIGNAL(restoreDocument(KConfigGroup)), part, SLOT(restoreDocument(KConfigGroup)));
+    connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
+    connect( part, SIGNAL(enablePrintAction(bool)), this, SLOT(setPrintEnabled(bool)));
+    connect( part, SIGNAL(enableCloseAction(bool)), this, SLOT(setCloseEnabled(bool)));
+}
+
+void Shell::print()
+{
+    QMetaObject::invokeMethod( m_tabs[m_activeTab].part, "slotPrint" );
+}
+
+void Shell::setPrintEnabled( bool enabled )
+{
+    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
+    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( !part )
+       return;
+
+    for( int i = 0; i < m_tabs.size(); ++i )
+    {
+       if( m_tabs[i].part == part )
+       {
+          m_tabs[i].printEnabled = enabled;
+          if( i == m_activeTab )
+             m_printAction->setEnabled( enabled );
+          break;
+       }
+    }
+}
+
+void Shell::setCloseEnabled( bool enabled )
+{
+    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
+    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
+    if( !part )
+       return;
+
+    for( int i = 0; i < m_tabs.size(); ++i )
+    {
+       if( m_tabs[i].part == part )
+       {
+          m_tabs[i].closeEnabled = enabled;
+          if( i == m_activeTab )
+             m_closeAction->setEnabled( enabled );
+          break;
+       }
+    }
+}
+
+KIcon Shell::getIcon( const KUrl& url )
+{
+    return KIcon(KMimeType::findByUrl(url)->iconName());
+}
+
+void Shell::activateNextTab()
+{
+    if( m_tabs.size() < 2 )
+        return;
+
+    const int nextTab = (m_activeTab == m_tabs.size()-1) ? 0 : m_activeTab+1;
+
+    setActiveTab( nextTab );
+}
+
+void Shell::activatePrevTab()
+{
+    if( m_tabs.size() < 2 )
+        return;
+
+    const int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
+
+    setActiveTab( prevTab );
 }
 
 #include "shell.moc"
