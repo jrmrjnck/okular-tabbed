@@ -123,14 +123,14 @@ void Shell::init()
     // and integrate the part's GUI with the shell's
     setupGUI(Keys | ToolBar | Save);
     createGUI(firstPart);
-
     connectPart( firstPart );
+
+    readSettings();
 
     if (m_args && m_args->isSet("unique") && m_args->count() == 1)
     {
         QDBusConnection::sessionBus().registerService("org.kde.okular");
     }
-    readSettings();
 
     m_unique = false;
     if (m_args && m_args->isSet("unique") && m_args->count() <= 1)
@@ -181,12 +181,9 @@ Shell::~Shell()
 
 void Shell::openUrl( const KUrl & url )
 {
-    if( m_tabs.size() == 0 )
-        return;
-
-    if( !m_tabs[m_activeTab].part->url().isEmpty() )
+    if ( m_tabs.size() != 0 )
     {
-        if( m_unique )
+        if( !m_tabs[m_activeTab].part->url().isEmpty() )
         {
             if( m_unique )
             {
@@ -194,43 +191,37 @@ void Shell::openUrl( const KUrl & url )
             }
             else
             {
-                Shell* newShell = new Shell();
-                newShell->openUrl( url );
-                newShell->show();
+                openNewTab( url );
+                setActiveTab( m_tabs.size()-1 );
             }
         }
         else
         {
-            openNewTab( url );
-            setActiveTab( m_tabs.size()-1 );
-        }
-    }
-    else
-    {
-        KParts::ReadWritePart* const emptyPart = m_tabs[m_activeTab].part;
-        if ( m_args ){
-            KDocumentViewer* doc = qobject_cast<KDocumentViewer*>(emptyPart);
-            if ( doc && m_args->isSet( "presentation" ) )
-                doc->startPresentation();
-            if ( m_args->isSet( "print" ) )
-                QMetaObject::invokeMethod( emptyPart, "enableStartWithPrint" );
-        }
-        bool openOk = emptyPart->openUrl( url );
-        const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
-        if ( !isstdin )
-        {
-            if ( openOk )
-            {
-#ifdef KActivities_FOUND
-                if ( !m_activityResource )
-                    m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
-
-                m_activityResource->setUri( url );
-#endif
-                m_recent->addUrl( url );
+            KParts::ReadWritePart* const emptyPart = m_tabs[m_activeTab].part;
+            if ( m_args ){
+                KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(emptyPart);
+                if ( doc && m_args->isSet( "presentation" ) )
+                    doc->startPresentation();
+                if ( m_args->isSet( "print" ) )
+                    QMetaObject::invokeMethod( emptyPart, "enableStartWithPrint" );
             }
-            else
-                m_recent->removeUrl( url );
+            bool openOk = emptyPart->openUrl( url );
+            const bool isstdin = url.fileName( KUrl::ObeyTrailingSlash ) == QLatin1String( "-" );
+            if ( !isstdin )
+            {
+                if ( openOk )
+                {
+#ifdef KActivities_FOUND
+                    if ( !m_activityResource )
+                        m_activityResource = new KActivities::ResourceInstance( window()->winId(), this );
+
+                    m_activityResource->setUri( url );
+#endif
+                    m_recent->addUrl( url );
+                }
+                else
+                    m_recent->removeUrl( url );
+            }
         }
     }
 }
@@ -552,8 +543,6 @@ void Shell::openNewTab( const KUrl& url, int desiredIndex )
 
 void Shell::connectPart( QObject* part )
 {
-    // These signals and slots defined in Okular::Part, but since we don't
-    // have access to that class, just pass in a KParts::Part* for brevity
     connect( this, SIGNAL(restoreDocument(KConfigGroup)), part, SLOT(restoreDocument(KConfigGroup)));
     connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
     connect( part, SIGNAL(enablePrintAction(bool)), this, SLOT(setPrintEnabled(bool)));
