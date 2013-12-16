@@ -442,27 +442,6 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
-    if( m_tabs.size() > 1 )
-    {
-        const int sel = KMessageBox::warningYesNoCancel(
-           this,
-           i18n("You have multiple tabs open in this window, are you sure you want to quit?"),
-           i18n("Confimation"),
-           KStandardGuiItem::quit(),
-           KGuiItem(i18n("Close Current Tab"),"tab-close"),
-           KStandardGuiItem::cancel(),
-           i18n("CloseMultipleTabs") );
-
-        if( sel == KMessageBox::Cancel )
-            return false;
-
-        if( sel == KMessageBox::No )
-        {
-           closeTab( m_activeTab );
-           return false;
-        }
-    }
-
     bool ret = true;
     for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
     {
