@@ -23,7 +23,7 @@
 class KCmdLineArgs;
 class KRecentFilesAction;
 class KToggleAction;
-class KTabBar;
+class KTabWidget;
 class QVBoxLayout;
 class QStackedWidget;
 class KPluginFactory;
@@ -102,7 +102,6 @@ private slots:
   // Tab event handlers
   void setActiveTab( int tab );
   void closeTab( int tab );
-  void moveTab( int from, int to );
   void activateNextTab();
   void activatePrevTab();
 
@@ -115,7 +114,7 @@ private:
   void setupActions();
   void init();
   QStringList fileFormats() const;
-  void openNewTab( const KUrl& url, int desiredIndex = -1 );
+  void openNewTab( const KUrl& url );
   void connectPart( QObject* part );
   KIcon getIcon( const KUrl& url );
 
@@ -132,9 +131,7 @@ private:
   bool m_menuBarWasShown, m_toolBarWasShown;
   bool m_unique;
   KUrl m_openUrl;
-  QVBoxLayout* m_centralLayout;
-  KTabBar* m_tabBar;
-  QStackedWidget* m_viewStack;
+  KTabWidget* m_tabWidget;
 
   struct TabState
   {
@@ -148,7 +145,6 @@ private:
     bool closeEnabled;
   };
   QList<TabState> m_tabs;
-  int m_activeTab;
   KAction* m_nextTabAction;
   KAction* m_prevTabAction;
 

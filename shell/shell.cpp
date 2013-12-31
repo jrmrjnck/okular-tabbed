@@ -43,7 +43,7 @@
 #include <ktogglefullscreenaction.h>
 #include <kactioncollection.h>
 #include <kwindowsystem.h>
-#include <ktabbar.h>
+#include <ktabwidget.h>
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <kxmlguifactory.h>
@@ -98,25 +98,14 @@ void Shell::init()
   if (firstPart)
   {
     // Setup tab bar
-    m_tabBar = new KTabBar( this );
-    m_tabBar->setTabsClosable( true );
-    m_tabBar->setElideMode( Qt::ElideRight );
-    connect( m_tabBar, SIGNAL(currentChanged(int)), SLOT(setActiveTab(int)) );
-    connect( m_tabBar, SIGNAL(tabCloseRequested(int)), SLOT(closeTab(int)) );
+    m_tabWidget = new KTabWidget( this );
+    m_tabWidget->setTabsClosable( true );
+    m_tabWidget->setElideMode( Qt::ElideRight );
+    m_tabWidget->setTabBarHidden( true );
+    connect( m_tabWidget, SIGNAL(currentChanged(int)), SLOT(setActiveTab(int)) );
+    connect( m_tabWidget, SIGNAL(tabCloseRequested(int)), SLOT(closeTab(int)) );
 
-    QWidget* const centralWidget = new QWidget( this );
-    m_viewStack = new QStackedWidget( this );
-    m_viewStack->addWidget( firstPart->widget() );
-
-    m_centralLayout = new QVBoxLayout( centralWidget );
-    m_centralLayout->setSpacing( 0 );
-    m_centralLayout->setMargin( 0 );
-    m_centralLayout->addWidget( m_tabBar );
-    m_centralLayout->addWidget( m_viewStack );
-    setCentralWidget( centralWidget );
-
-    m_tabs.append( firstPart );
-    m_activeTab = 0;
+    setCentralWidget( m_tabWidget );
 
     // then, setup our actions
     setupActions();
@@ -124,6 +113,9 @@ void Shell::init()
     setupGUI(Keys | ToolBar | Save);
     createGUI(firstPart);
     connectPart( firstPart );
+
+    m_tabs.append( firstPart );
+    m_tabWidget->addTab( firstPart->widget(), QString() );
 
     readSettings();
 
@@ -181,9 +173,10 @@ Shell::~Shell()
 
 void Shell::openUrl( const KUrl & url )
 {
+    const int activeTab = m_tabWidget->currentIndex();
     if ( m_tabs.size() != 0 )
     {
-        if( !m_tabs[m_activeTab].part->url().isEmpty() )
+        if( !m_tabs[activeTab].part->url().isEmpty() )
         {
             if( m_unique )
             {
@@ -197,7 +190,7 @@ void Shell::openUrl( const KUrl & url )
         }
         else
         {
-            KParts::ReadWritePart* const emptyPart = m_tabs[m_activeTab].part;
+            KParts::ReadWritePart* const emptyPart = m_tabs[activeTab].part;
             if ( m_args ){
                 KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(emptyPart);
                 if ( doc && m_args->isSet( "presentation" ) )
@@ -222,13 +215,15 @@ void Shell::openUrl( const KUrl & url )
                 else
                     m_recent->removeUrl( url );
             }
+            m_tabWidget->setTabText( 0, url.fileName() );
+            m_tabWidget->setTabIcon( 0, getIcon(url) );
         }
     }
 }
 
 void Shell::closeUrl()
 {
-    closeTab( m_activeTab );
+    closeTab( m_tabWidget->currentIndex() );
 }
 
 void Shell::readSettings()
@@ -334,9 +329,10 @@ void Shell::fileOpen()
 	// this slot is called whenever the File->Open menu is selected,
 	// the Open shortcut is pressed (usually CTRL+O) or the Open toolbar
 	// button is clicked
+    const int activeTab = m_tabWidget->currentIndex();
     if ( !m_fileformatsscanned )
     {
-        const KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(m_tabs[m_activeTab].part);
+        const KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(m_tabs[activeTab].part);
         if ( doc )
             m_fileformats = doc->supportedMimeTypes();
 
@@ -347,7 +343,7 @@ void Shell::fileOpen()
     }
 
     QString startDir;
-    const KParts::ReadWritePart* const curPart = m_tabs[m_activeTab].part;
+    const KParts::ReadWritePart* const curPart = m_tabs[activeTab].part;
     if ( curPart->url().isLocalFile() )
         startDir = curPart->url().toLocalFile();
     KFileDialog dlg( startDir, QString(), this );
@@ -452,12 +448,7 @@ bool Shell::queryClose()
 
 void Shell::setActiveTab( int tab )
 {
-    if( tab == -1 )
-        return;
-
-    m_activeTab = tab;
-    m_tabBar->setCurrentIndex( tab );
-    m_viewStack->setCurrentWidget( m_tabs[tab].part->widget() );
+    m_tabWidget->setCurrentIndex( tab );
     createGUI( m_tabs[tab].part );
     m_printAction->setEnabled( m_tabs[tab].printEnabled );
     m_closeAction->setEnabled( m_tabs[tab].closeEnabled );
@@ -469,7 +460,6 @@ void Shell::closeTab( int tab )
     if( m_tabs.count() > 1 )
     {
         KParts::ReadWritePart* const part = m_tabs[tab].part;
-        m_viewStack->removeWidget( part->widget() );
         if( part->factory() )
             part->factory()->removeClient( part );
         part->disconnect();
@@ -477,44 +467,34 @@ void Shell::closeTab( int tab )
         m_tabs.removeAt( tab );
     }
 
-    m_tabBar->removeTab( tab );
+    m_tabWidget->removeTab( tab );
 
-    if( m_tabBar->count() == 1 )
+    if( m_tabWidget->count() == 1 )
     {
-        m_tabBar->removeTab( 0 );
+        m_tabWidget->setTabBarHidden( true );
         m_nextTabAction->setEnabled( false );
         m_prevTabAction->setEnabled( false );
     }
 }
 
-void Shell::moveTab( int from, int to )
-{
-    m_tabs.move( from, to );
-}
-
-void Shell::openNewTab( const KUrl& url, int desiredIndex )
+void Shell::openNewTab( const KUrl& url )
 {
     // Tabs are hidden when there's only one, so show it
     if( m_tabs.size() == 1 )
     {
-        const KUrl firstUrl = m_tabs[0].part->url();
-        m_tabBar->addTab( getIcon(firstUrl), firstUrl.fileName() );
+        m_tabWidget->setTabBarHidden( false );
         m_nextTabAction->setEnabled( true );
         m_prevTabAction->setEnabled( true );
     }
 
-    if( desiredIndex > m_tabs.size() )
-       desiredIndex = m_tabs.size();
-
-    const int newIndex = (desiredIndex >= 0) ? desiredIndex : m_tabs.size();
+    const int newIndex = m_tabs.size();
 
     // Make new part
-    m_tabs.insert( newIndex, m_partFactory->create<KParts::ReadWritePart>(this) );
+    m_tabs.append( m_partFactory->create<KParts::ReadWritePart>(this) );
     connectPart( m_tabs[newIndex].part );
 
     // Update GUI
-    m_viewStack->addWidget( m_tabs[newIndex].part->widget() );
-    m_tabBar->insertTab( newIndex, getIcon(url), url.fileName() );
+    m_tabWidget->addTab( m_tabs[newIndex].part->widget(), getIcon(url), url.fileName() );
 
     if( m_tabs[newIndex].part->openUrl(url) )
         m_recent->addUrl( url );
@@ -530,7 +510,7 @@ void Shell::connectPart( QObject* part )
 
 void Shell::print()
 {
-    QMetaObject::invokeMethod( m_tabs[m_activeTab].part, "slotPrint" );
+    QMetaObject::invokeMethod( m_tabs[m_tabWidget->currentIndex()].part, "slotPrint" );
 }
 
 void Shell::setPrintEnabled( bool enabled )
@@ -545,7 +525,7 @@ void Shell::setPrintEnabled( bool enabled )
        if( m_tabs[i].part == part )
        {
           m_tabs[i].printEnabled = enabled;
-          if( i == m_activeTab )
+          if( i == m_tabWidget->currentIndex() )
              m_printAction->setEnabled( enabled );
           break;
        }
@@ -564,7 +544,7 @@ void Shell::setCloseEnabled( bool enabled )
        if( m_tabs[i].part == part )
        {
           m_tabs[i].closeEnabled = enabled;
-          if( i == m_activeTab )
+          if( i == m_tabWidget->currentIndex() )
              m_closeAction->setEnabled( enabled );
           break;
        }
@@ -581,7 +561,8 @@ void Shell::activateNextTab()
     if( m_tabs.size() < 2 )
         return;
 
-    const int nextTab = (m_activeTab == m_tabs.size()-1) ? 0 : m_activeTab+1;
+    const int activeTab = m_tabWidget->currentIndex();
+    const int nextTab = (activeTab == m_tabs.size()-1) ? 0 : activeTab+1;
 
     setActiveTab( nextTab );
 }
@@ -591,7 +572,8 @@ void Shell::activatePrevTab()
     if( m_tabs.size() < 2 )
         return;
 
-    const int prevTab = (m_activeTab == 0) ? m_tabs.size()-1 : m_activeTab-1;
+    const int activeTab = m_tabWidget->currentIndex();
+    const int prevTab = (activeTab == 0) ? m_tabs.size()-1 : activeTab-1;
 
     setActiveTab( prevTab );
 }
