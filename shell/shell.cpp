@@ -438,12 +438,12 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
-    bool ret = true;
     for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
     {
-        ret = ret && it->part->queryClose();
+        if( !it->part->queryClose() )
+           return false;
     }
-    return ret;
+    return true;
 }
 
 void Shell::setActiveTab( int tab )
