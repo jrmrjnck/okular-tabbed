@@ -274,17 +274,17 @@ void Shell::setupActions()
   m_showMenuBarAction = KStandardAction::showMenubar( this, SLOT(slotShowMenubar()), actionCollection());
   m_fullScreenAction = KStandardAction::fullScreen( this, SLOT(slotUpdateFullScreen()), this,actionCollection() );
 
-    m_nextTabAction = actionCollection()->addAction("tab-next");
-    m_nextTabAction->setText( i18n("Next Tab") );
-    m_nextTabAction->setShortcut( QKeySequence::NextChild );
-    m_nextTabAction->setEnabled( false );
-    connect( m_nextTabAction, SIGNAL(triggered()), this, SLOT(activateNextTab()) );
+  m_nextTabAction = actionCollection()->addAction("tab-next");
+  m_nextTabAction->setText( i18n("Next Tab") );
+  m_nextTabAction->setShortcut( QKeySequence::NextChild );
+  m_nextTabAction->setEnabled( false );
+  connect( m_nextTabAction, SIGNAL(triggered()), this, SLOT(activateNextTab()) );
 
-    m_prevTabAction = actionCollection()->addAction("tab-previous");
-    m_prevTabAction->setText( i18n("Previous Tab") );
-    m_prevTabAction->setShortcut( QKeySequence::PreviousChild );
-    m_prevTabAction->setEnabled( false );
-    connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
+  m_prevTabAction = actionCollection()->addAction("tab-previous");
+  m_prevTabAction->setText( i18n("Previous Tab") );
+  m_prevTabAction->setShortcut( QKeySequence::PreviousChild );
+  m_prevTabAction->setEnabled( false );
+  connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
 }
 
 void Shell::saveProperties(KConfigGroup &group)
