@@ -190,7 +190,9 @@ void Shell::openUrl( const KUrl & url )
         }
         else
         {
-            KParts::ReadWritePart* const emptyPart = m_tabs[activeTab].part;
+            KParts::ReadWritePart* const emptyPart = m_tabs[0].part;
+            m_tabWidget->setTabText( 0, url.fileName() );
+            m_tabWidget->setTabIcon( 0, getIcon(url) );
             if ( m_args ){
                 KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(emptyPart);
                 if ( doc && m_args->isSet( "presentation" ) )
@@ -215,8 +217,6 @@ void Shell::openUrl( const KUrl & url )
                 else
                     m_recent->removeUrl( url );
             }
-            m_tabWidget->setTabText( 0, url.fileName() );
-            m_tabWidget->setTabIcon( 0, getIcon(url) );
         }
     }
 }
