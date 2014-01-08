@@ -184,8 +184,17 @@ void Shell::openUrl( const KUrl & url )
             }
             else
             {
-                openNewTab( url );
-                setActiveTab( m_tabs.size()-1 );
+                if( m_openInTab->isChecked() )
+                {
+                    openNewTab( url );
+                    setActiveTab( m_tabs.size()-1 );
+                }
+                else
+                {
+                    Shell* newShell = new Shell();
+                    newShell->openUrl( url );
+                    newShell->show();
+                }
             }
         }
         else
@@ -239,6 +248,8 @@ void Shell::readSettings()
         m_menuBarWasShown = group.readEntry( shouldShowMenuBarComingFromFullScreen, true );
         m_toolBarWasShown = group.readEntry( shouldShowToolBarComingFromFullScreen, true );
     }
+
+    m_openInTab->setChecked( group.readEntry("OpenInTab",true) );
 }
 
 void Shell::writeSettings()
@@ -251,6 +262,7 @@ void Shell::writeSettings()
         group.writeEntry( shouldShowMenuBarComingFromFullScreen, m_menuBarWasShown );
         group.writeEntry( shouldShowToolBarComingFromFullScreen, m_toolBarWasShown );
     }
+    group.writeEntry( "OpenInTab", m_openInTab->isChecked() );
     KGlobal::config()->sync();
 }
 
@@ -284,6 +296,9 @@ void Shell::setupActions()
   m_prevTabAction->setShortcut( KStandardShortcut::TabPrev );
   m_prevTabAction->setEnabled( false );
   connect( m_prevTabAction, SIGNAL(triggered()), this, SLOT(activatePrevTab()) );
+
+  m_openInTab = actionCollection()->add<KToggleAction>("open_in_tab");
+  m_openInTab->setText( i18n("Open Documents in New Tab") );
 }
 
 void Shell::saveProperties(KConfigGroup &group)

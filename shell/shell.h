@@ -134,6 +134,7 @@ private:
   bool m_unique;
   KUrl m_openUrl;
   KTabWidget* m_tabWidget;
+  KToggleAction* m_openInTab;
 
   struct TabState
   {
