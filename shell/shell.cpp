@@ -44,8 +44,6 @@
 #include <kactioncollection.h>
 #include <kwindowsystem.h>
 #include <ktabwidget.h>
-#include <QVBoxLayout>
-#include <QStackedWidget>
 #include <kxmlguifactory.h>
 
 #ifdef KActivities_FOUND

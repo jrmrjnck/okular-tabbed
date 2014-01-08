@@ -25,8 +25,6 @@ class KCmdLineArgs;
 class KRecentFilesAction;
 class KToggleAction;
 class KTabWidget;
-class QVBoxLayout;
-class QStackedWidget;
 class KPluginFactory;
 
 class KDocumentViewer;
