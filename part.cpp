@@ -1226,6 +1226,8 @@ bool Part::openFile()
     }
     bool canSearch = m_document->supportsSearching();
 
+    emit mimeTypeChanged( mime );
+
     // update one-time actions
     emit enableCloseAction( ok );
     m_find->setEnabled( ok && canSearch );

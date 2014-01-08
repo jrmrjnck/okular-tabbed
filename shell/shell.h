@@ -17,6 +17,7 @@
 #define _OKULAR_SHELL_H_
 
 #include <kparts/mainwindow.h>
+#include <kmimetype.h>
 
 #include <QtDBus/QtDBus>
 
@@ -98,6 +99,7 @@ private slots:
   void print();
   void setPrintEnabled( bool enabled );
   void setCloseEnabled( bool enabled );
+  void setTabIcon( KMimeType::Ptr mimeType );
 
   // Tab event handlers
   void setActiveTab( int tab );
@@ -116,7 +118,7 @@ private:
   QStringList fileFormats() const;
   void openNewTab( const KUrl& url );
   void connectPart( QObject* part );
-  KIcon getIcon( const KUrl& url );
+  int  findTabIndex( QObject* sender );
 
 private:
   KCmdLineArgs* m_args;

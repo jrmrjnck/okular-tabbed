@@ -192,7 +192,6 @@ void Shell::openUrl( const KUrl & url )
         {
             KParts::ReadWritePart* const emptyPart = m_tabs[0].part;
             m_tabWidget->setTabText( 0, url.fileName() );
-            m_tabWidget->setTabIcon( 0, getIcon(url) );
             if ( m_args ){
                 KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(emptyPart);
                 if ( doc && m_args->isSet( "presentation" ) )
@@ -494,9 +493,10 @@ void Shell::openNewTab( const KUrl& url )
     connectPart( m_tabs[newIndex].part );
 
     // Update GUI
-    m_tabWidget->addTab( m_tabs[newIndex].part->widget(), getIcon(url), url.fileName() );
+    KParts::ReadWritePart* const part = m_tabs[newIndex].part;
+    m_tabWidget->addTab( part->widget(), url.fileName() );
 
-    if( m_tabs[newIndex].part->openUrl(url) )
+    if( part->openUrl(url) )
         m_recent->addUrl( url );
 }
 
@@ -506,6 +506,7 @@ void Shell::connectPart( QObject* part )
     connect( this, SIGNAL(saveDocumentRestoreInfo(KConfigGroup&)), part, SLOT(saveDocumentRestoreInfo(KConfigGroup&)));
     connect( part, SIGNAL(enablePrintAction(bool)), this, SLOT(setPrintEnabled(bool)));
     connect( part, SIGNAL(enableCloseAction(bool)), this, SLOT(setCloseEnabled(bool)));
+    connect( part, SIGNAL(mimeTypeChanged(KMimeType::Ptr)), this, SLOT(setTabIcon(KMimeType::Ptr)));
 }
 
 void Shell::print()
@@ -515,45 +516,24 @@ void Shell::print()
 
 void Shell::setPrintEnabled( bool enabled )
 {
-    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
-    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( !part )
-       return;
-
-    for( int i = 0; i < m_tabs.size(); ++i )
+    int i = findTabIndex( sender() );
+    if( i != -1 )
     {
-       if( m_tabs[i].part == part )
-       {
-          m_tabs[i].printEnabled = enabled;
-          if( i == m_tabWidget->currentIndex() )
-             m_printAction->setEnabled( enabled );
-          break;
-       }
+        m_tabs[i].printEnabled = enabled;
+        if( i == m_tabWidget->currentIndex() )
+            m_printAction->setEnabled( enabled );
     }
 }
 
 void Shell::setCloseEnabled( bool enabled )
 {
-    // See warnings: http://qt-project.org/doc/qt-4.8/qobject.html#sender
-    const KParts::ReadWritePart* const part = qobject_cast<KParts::ReadWritePart*>(sender());
-    if( !part )
-       return;
-
-    for( int i = 0; i < m_tabs.size(); ++i )
+    int i = findTabIndex( sender() );
+    if( i != -1 )
     {
-       if( m_tabs[i].part == part )
-       {
-          m_tabs[i].closeEnabled = enabled;
-          if( i == m_tabWidget->currentIndex() )
-             m_closeAction->setEnabled( enabled );
-          break;
-       }
+        m_tabs[i].closeEnabled = enabled;
+        if( i == m_tabWidget->currentIndex() )
+            m_closeAction->setEnabled( enabled );
     }
-}
-
-KIcon Shell::getIcon( const KUrl& url )
-{
-    return KIcon(KMimeType::findByUrl(url)->iconName());
 }
 
 void Shell::activateNextTab()
@@ -576,6 +556,27 @@ void Shell::activatePrevTab()
     const int prevTab = (activeTab == 0) ? m_tabs.size()-1 : activeTab-1;
 
     setActiveTab( prevTab );
+}
+
+void Shell::setTabIcon( KMimeType::Ptr mimeType )
+{
+    int i = findTabIndex( sender() );
+    if( i != -1 )
+    {
+        m_tabWidget->setTabIcon( i, KIcon(mimeType->iconName()) );
+    }
+}
+
+int Shell::findTabIndex( QObject* sender )
+{
+    for( int i = 0; i < m_tabs.size(); ++i )
+    {
+        if( m_tabs[i].part == sender )
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 #include "shell.moc"
