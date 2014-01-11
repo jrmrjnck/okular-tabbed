@@ -450,9 +450,15 @@ QSize Shell::sizeHint() const
 
 bool Shell::queryClose()
 {
-    for( QList<TabState>::iterator it = m_tabs.begin(); it != m_tabs.end(); ++it )
+    for( int i = 0; i < m_tabs.size(); ++i )
     {
-        if( !it->part->queryClose() )
+        KParts::ReadWritePart* const part = m_tabs[i].part;
+
+        // To resolve confusion about multiple modified docs, switch to relevant tab
+        if( part->isModified() )
+            m_tabWidget->setCurrentIndex( i );
+
+        if( !part->queryClose() )
            return false;
     }
     return true;
