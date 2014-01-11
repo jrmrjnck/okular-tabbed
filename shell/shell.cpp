@@ -477,16 +477,16 @@ void Shell::closeTab( int tab )
         part->disconnect();
         part->deleteLater();
         m_tabs.removeAt( tab );
+        m_tabWidget->removeTab( tab );
+
+        if( m_tabWidget->count() == 1 )
+        {
+            m_tabWidget->setTabBarHidden( true );
+            m_nextTabAction->setEnabled( false );
+            m_prevTabAction->setEnabled( false );
+        }
     }
 
-    m_tabWidget->removeTab( tab );
-
-    if( m_tabWidget->count() == 1 )
-    {
-        m_tabWidget->setTabBarHidden( true );
-        m_nextTabAction->setEnabled( false );
-        m_prevTabAction->setEnabled( false );
-    }
 }
 
 void Shell::openNewTab( const KUrl& url )
