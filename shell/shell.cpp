@@ -456,7 +456,7 @@ bool Shell::queryClose()
 
         // To resolve confusion about multiple modified docs, switch to relevant tab
         if( part->isModified() )
-            m_tabWidget->setCurrentIndex( i );
+            setActiveTab( i );
 
         if( !part->queryClose() )
            return false;
