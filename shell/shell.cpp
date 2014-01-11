@@ -468,10 +468,9 @@ void Shell::setActiveTab( int tab )
 
 void Shell::closeTab( int tab )
 {
-    m_tabs[tab].part->closeUrl();
-    if( m_tabs.count() > 1 )
+    KParts::ReadWritePart* const part = m_tabs[tab].part;
+    if( part->closeUrl() && m_tabs.count() > 1 )
     {
-        KParts::ReadWritePart* const part = m_tabs[tab].part;
         if( part->factory() )
             part->factory()->removeClient( part );
         part->disconnect();
