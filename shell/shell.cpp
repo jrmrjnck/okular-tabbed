@@ -247,7 +247,7 @@ void Shell::readSettings()
         m_toolBarWasShown = group.readEntry( shouldShowToolBarComingFromFullScreen, true );
     }
 
-    m_openInTab->setChecked( group.readEntry("OpenInTab",true) );
+    m_openInTab->setChecked( group.readEntry("OpenInTab", true) );
 }
 
 void Shell::writeSettings()
