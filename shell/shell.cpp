@@ -172,7 +172,7 @@ Shell::~Shell()
 void Shell::openUrl( const KUrl & url )
 {
     const int activeTab = m_tabWidget->currentIndex();
-    if ( m_tabs.size() != 0 )
+    if ( activeTab < m_tabs.size() )
     {
         if( !m_tabs[activeTab].part->url().isEmpty() )
         {
@@ -197,8 +197,8 @@ void Shell::openUrl( const KUrl & url )
         }
         else
         {
-            KParts::ReadWritePart* const emptyPart = m_tabs[0].part;
-            m_tabWidget->setTabText( 0, url.fileName() );
+            KParts::ReadWritePart* const emptyPart = m_tabs[activeTab].part;
+            m_tabWidget->setTabText( activeTab, url.fileName() );
             if ( m_args ){
                 KDocumentViewer* const doc = qobject_cast<KDocumentViewer*>(emptyPart);
                 if ( doc && m_args->isSet( "presentation" ) )
